@@ -3,24 +3,29 @@ import yfinance as yf
 import pandas as pd
 import altair as alt
 
+# -----------------------------
+# Page config
+# -----------------------------
 st.set_page_config(
     page_title="DCF Valuation Tool",
     page_icon="📈",
     layout="centered"
 )
 
-st.markdown(
-    """
-    <h1 style='text-align: center;'>DCF Valuation Tool</h1>
-    <p style='text-align: center; font-size:22px; font-weight: bold; color: #4FC3F7;'>
-    By: Nishtha Garg
-    </p>
-    <p style='text-align: center; color: #BBBBBB;'>
-    Interactive discounted cash flow model with scenario and sensitivity analysis
-    </p>
-    """,
-    unsafe_allow_html=True
-)
+# -----------------------------
+# Helpers
+# -----------------------------
+def format_dollar_short(value):
+    if value is None:
+        return "N/A"
+    if abs(value) >= 1_000_000_000:
+        return f"${value / 1_000_000_000:,.2f}B"
+    if abs(value) >= 1_000_000:
+        return f"${value / 1_000_000:,.2f}M"
+    return f"${value:,.2f}"
+
+def format_percent(value):
+    return f"{value:,.1f}%"
 
 @st.cache_data(ttl=1800)
 def get_market_and_financial_data(symbol):
@@ -36,11 +41,13 @@ def get_market_and_financial_data(symbol):
 
     shares_outstanding = None
     company_name = symbol
+    market_cap = None
 
     try:
         fast_info = ticker.fast_info
         if hasattr(fast_info, "get"):
             shares_outstanding = fast_info.get("shares")
+            market_cap = fast_info.get("market_cap")
     except Exception:
         pass
 
@@ -51,10 +58,12 @@ def get_market_and_financial_data(symbol):
             current_price = info.get("currentPrice", 0)
         if shares_outstanding is None:
             shares_outstanding = info.get("sharesOutstanding")
+        if market_cap is None:
+            market_cap = info.get("marketCap")
     except Exception:
         pass
 
-    return company_name, current_price, shares_outstanding, financials, cashflow
+    return company_name, current_price, shares_outstanding, market_cap, financials, cashflow
 
 def run_dcf(
     base_revenue,
@@ -112,16 +121,88 @@ def run_dcf(
         "implied_price": implied_price
     }
 
-def format_dollar_short(value):
-    if value is None:
-        return "N/A"
-    if abs(value) >= 1_000_000_000:
-        return f"${value / 1_000_000_000:,.2f}B"
-    if abs(value) >= 1_000_000:
-        return f"${value / 1_000_000:,.2f}M"
-    return f"${value:,.2f}"
+# -----------------------------
+# Custom styling
+# -----------------------------
+st.markdown(
+    """
+    <style>
+    .main {
+        padding-top: 1rem;
+    }
+    .hero-title {
+        text-align: center;
+        font-size: 3rem;
+        font-weight: 800;
+        margin-bottom: 0.25rem;
+    }
+    .hero-name {
+        text-align: center;
+        font-size: 1.35rem;
+        font-weight: 700;
+        color: #4FC3F7;
+        margin-bottom: 0.4rem;
+    }
+    .hero-subtitle {
+        text-align: center;
+        color: #AAB0B6;
+        font-size: 1rem;
+        margin-bottom: 1.5rem;
+    }
+    .summary-box {
+        border: 1px solid rgba(255,255,255,0.08);
+        border-radius: 14px;
+        padding: 1rem 1rem;
+        background: rgba(255,255,255,0.03);
+        margin-top: 0.75rem;
+        margin-bottom: 1rem;
+    }
+    .summary-title {
+        font-size: 1rem;
+        font-weight: 700;
+        margin-bottom: 0.35rem;
+    }
+    .metric-card {
+        border: 1px solid rgba(255,255,255,0.08);
+        border-radius: 16px;
+        padding: 1rem;
+        background: rgba(255,255,255,0.03);
+        text-align: left;
+        margin-bottom: 0.75rem;
+    }
+    .metric-label {
+        color: #AAB0B6;
+        font-size: 0.9rem;
+        margin-bottom: 0.25rem;
+    }
+    .metric-value {
+        font-size: 1.7rem;
+        font-weight: 800;
+    }
+    .section-label {
+        font-size: 1.75rem;
+        font-weight: 800;
+        margin-top: 1.25rem;
+        margin-bottom: 0.75rem;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True
+)
 
-st.subheader("Inputs")
+st.markdown(
+    """
+    <div class="hero-title">DCF Valuation Tool</div>
+    <div class="hero-name">Nishtha Garg</div>
+    <div class="hero-subtitle">Interactive discounted cash flow model with scenario and sensitivity analysis</div>
+    """,
+    unsafe_allow_html=True
+)
+
+# -----------------------------
+# Inputs
+# -----------------------------
+st.markdown('<div class="section-label">Inputs</div>', unsafe_allow_html=True)
 
 symbol = st.text_input("Enter Stock Ticker", "AAPL").upper()
 growth_rate = st.number_input("Revenue Growth Rate (%)", value=5.0, step=0.5) / 100
@@ -133,9 +214,12 @@ net_debt = st.number_input("Net Debt ($)", value=0.0, step=1000000.0)
 
 run_button = st.button("Run Valuation")
 
+# -----------------------------
+# Main logic
+# -----------------------------
 if run_button:
     try:
-        company_name, current_price, shares_outstanding, financials, cashflow = get_market_and_financial_data(symbol)
+        company_name, current_price, shares_outstanding, market_cap, financials, cashflow = get_market_and_financial_data(symbol)
 
         revenue = financials.loc["Total Revenue"].iloc[0]
         operating_income = financials.loc["Operating Income"].iloc[0]
@@ -166,22 +250,92 @@ if run_button:
             projection_years=projection_years
         )
 
-        st.subheader(f"Results for {company_name}")
+        implied_price = base_results["implied_price"]
+        enterprise_value = base_results["enterprise_value"]
+        upside_downside = ((implied_price - current_price) / current_price) * 100 if current_price else 0
 
-        c1, c2, c3 = st.columns(3)
-        c1.metric("Current Price", format_dollar_short(current_price))
-        c2.metric("Implied Price", format_dollar_short(base_results["implied_price"]))
-        c3.metric("Enterprise Value", format_dollar_short(base_results["enterprise_value"]))
+        # -----------------------------
+        # Results cards
+        # -----------------------------
+        st.markdown(f'<div class="section-label">Results for {company_name}</div>', unsafe_allow_html=True)
 
-        upside_downside = ((base_results["implied_price"] - current_price) / current_price) * 100 if current_price else 0
-        st.metric("Upside / Downside", f"{upside_downside:,.1f}%")
+        col1, col2 = st.columns(2)
+        with col1:
+            st.markdown(
+                f"""
+                <div class="metric-card">
+                    <div class="metric-label">Current Price</div>
+                    <div class="metric-value">{format_dollar_short(current_price)}</div>
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
+        with col2:
+            st.markdown(
+                f"""
+                <div class="metric-card">
+                    <div class="metric-label">Implied Price</div>
+                    <div class="metric-value">{format_dollar_short(implied_price)}</div>
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
 
-        if base_results["implied_price"] > current_price:
-            st.success("📈 Stock appears UNDERVALUED based on your assumptions.")
+        col3, col4 = st.columns(2)
+        with col3:
+            st.markdown(
+                f"""
+                <div class="metric-card">
+                    <div class="metric-label">Enterprise Value</div>
+                    <div class="metric-value">{format_dollar_short(enterprise_value)}</div>
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
+        with col4:
+            st.markdown(
+                f"""
+                <div class="metric-card">
+                    <div class="metric-label">Upside / Downside</div>
+                    <div class="metric-value">{format_percent(upside_downside)}</div>
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
+
+        if market_cap:
+            st.caption(f"Market Cap: {format_dollar_short(market_cap)}")
+
+        # -----------------------------
+        # Valuation summary
+        # -----------------------------
+        view_text = "UNDERVALUED" if implied_price > current_price else "OVERVALUED"
+        color_box = "st.success" if implied_price > current_price else "st.error"
+
+        if implied_price > current_price:
+            st.success(f"📈 Based on your assumptions, {company_name} appears UNDERVALUED.")
         else:
-            st.error("📉 Stock appears OVERVALUED based on your assumptions.")
+            st.error(f"📉 Based on your assumptions, {company_name} appears OVERVALUED.")
 
-        st.subheader("Projected Financials")
+        st.markdown(
+            f"""
+            <div class="summary-box">
+                <div class="summary-title">Valuation Summary</div>
+                <div>
+                    Under your current assumptions — revenue growth of <b>{growth_rate*100:.1f}%</b>,
+                    WACC of <b>{wacc*100:.1f}%</b>, and terminal growth of <b>{terminal_growth*100:.1f}%</b> —
+                    the model estimates an implied value of <b>{format_dollar_short(implied_price)}</b> per share
+                    versus a current market price of <b>{format_dollar_short(current_price)}</b>.
+                </div>
+            </div>
+            """,
+            unsafe_allow_html=True
+        )
+
+        # -----------------------------
+        # Prettier table
+        # -----------------------------
+        st.markdown('<div class="section-label">Projected Financials</div>', unsafe_allow_html=True)
 
         projection_df = pd.DataFrame({
             "Year": list(range(1, projection_years + 1)),
@@ -190,15 +344,17 @@ if run_button:
             "Discounted FCF ($M)": [x / 1_000_000 for x in base_results["discounted_fcfs"]],
         })
 
-        styled_projection_df = projection_df.style.format({
-            "Projected Revenue ($M)": "${:,.1f}",
-            "Projected FCF ($M)": "${:,.1f}",
-            "Discounted FCF ($M)": "${:,.1f}",
-        })
+        display_projection_df = projection_df.copy()
+        display_projection_df["Projected Revenue ($M)"] = display_projection_df["Projected Revenue ($M)"].map(lambda x: f"${x:,.1f}")
+        display_projection_df["Projected FCF ($M)"] = display_projection_df["Projected FCF ($M)"].map(lambda x: f"${x:,.1f}")
+        display_projection_df["Discounted FCF ($M)"] = display_projection_df["Discounted FCF ($M)"].map(lambda x: f"${x:,.1f}")
 
-        st.dataframe(styled_projection_df, use_container_width=True)
+        st.dataframe(display_projection_df, use_container_width=True, hide_index=True)
 
-        st.subheader("Projection Charts")
+        # -----------------------------
+        # Better charts
+        # -----------------------------
+        st.markdown('<div class="section-label">Projection Charts</div>', unsafe_allow_html=True)
 
         revenue_chart_df = pd.DataFrame({
             "Year": list(range(1, projection_years + 1)),
@@ -210,20 +366,33 @@ if run_button:
             "FCF ($M)": [x / 1_000_000 for x in base_results["projected_fcfs"]]
         })
 
-        revenue_chart = alt.Chart(revenue_chart_df).mark_line(point=True, color="#4FC3F7", strokeWidth=3).encode(
-            x=alt.X("Year:Q", axis=alt.Axis(labelAngle=0)),
-            y=alt.Y("Revenue ($M):Q", title="Revenue ($M)")
-        ).properties(height=300)
+        revenue_chart = (
+            alt.Chart(revenue_chart_df)
+            .mark_line(point=True, color="#4FC3F7", strokeWidth=3)
+            .encode(
+                x=alt.X("Year:Q", title="Year", axis=alt.Axis(labelAngle=0)),
+                y=alt.Y("Revenue ($M):Q", title="Revenue ($M)")
+            )
+            .properties(height=280, title="Revenue Forecast")
+        )
 
-        fcf_chart = alt.Chart(fcf_chart_df).mark_bar(color="#7E57C2").encode(
-            x=alt.X("Year:Q", axis=alt.Axis(labelAngle=0)),
-            y=alt.Y("FCF ($M):Q", title="FCF ($M)")
-        ).properties(height=300)
+        fcf_chart = (
+            alt.Chart(fcf_chart_df)
+            .mark_bar(color="#7E57C2", cornerRadiusTopLeft=4, cornerRadiusTopRight=4)
+            .encode(
+                x=alt.X("Year:Q", title="Year", axis=alt.Axis(labelAngle=0)),
+                y=alt.Y("FCF ($M):Q", title="FCF ($M)")
+            )
+            .properties(height=280, title="Free Cash Flow Forecast")
+        )
 
         st.altair_chart(revenue_chart, use_container_width=True)
         st.altair_chart(fcf_chart, use_container_width=True)
 
-        st.subheader("Scenario Analysis")
+        # -----------------------------
+        # Scenario analysis
+        # -----------------------------
+        st.markdown('<div class="section-label">Scenario Analysis</div>', unsafe_allow_html=True)
 
         st.markdown("**Bear Case**")
         bear_growth = st.number_input("Bear Growth (%)", value=max((growth_rate * 100) - 2, 0.0), key="bear_growth") / 100
@@ -280,9 +449,12 @@ if run_button:
                     "Implied Price": "Invalid"
                 })
 
-        st.dataframe(pd.DataFrame(scenario_rows), use_container_width=True)
+        st.dataframe(pd.DataFrame(scenario_rows), use_container_width=True, hide_index=True)
 
-        st.subheader("Sensitivity Analysis")
+        # -----------------------------
+        # Sensitivity analysis
+        # -----------------------------
+        st.markdown('<div class="section-label">Sensitivity Analysis</div>', unsafe_allow_html=True)
 
         wacc_input = st.text_input("WACC values (%)", "7,8,9,10")
         tg_input = st.text_input("Terminal Growth values (%)", "2,2.5,3")
