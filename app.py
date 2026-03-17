@@ -2,9 +2,6 @@ import streamlit as st
 import yfinance as yf
 import pandas as pd
 
-# -----------------------------
-# Page setup
-# -----------------------------
 st.set_page_config(
     page_title="DCF Valuation Tool",
     page_icon="📈",
@@ -14,19 +11,16 @@ st.set_page_config(
 st.markdown(
     """
     <h1 style='text-align: center;'>DCF Valuation Tool</h1>
-    <p style='text-align: center; font-size:22px;font-weight: bold; color: #4FC3F7;'>
+    <p style='text-align: center; font-size:22px; font-weight: bold; color: #4FC3F7;'>
     By: Nishtha Garg
     </p>
     <p style='text-align: center; color: #BBBBBB;'>
-    Interactive Discounted Cash Flow model with Scenario and Sensitivity Analysis
+    Interactive discounted cash flow model with scenario and sensitivity analysis
     </p>
     """,
     unsafe_allow_html=True
 )
 
-# -----------------------------
-# Helper function
-# -----------------------------
 def run_dcf(
     base_revenue,
     ebit_margin,
@@ -54,7 +48,7 @@ def run_dcf(
         nopat = ebit * (1 - tax_rate)
         da = revenue_proj * da_percent
         capex_proj = revenue_proj * capex_percent
-        nwc = 0  # simplified for now
+        nwc = 0
 
         fcf = nopat + da - capex_proj - nwc
         projected_fcfs.append(fcf)
@@ -78,20 +72,14 @@ def run_dcf(
         "projected_revenues": projected_revenues,
         "projected_fcfs": projected_fcfs,
         "discounted_fcfs": discounted_fcfs,
-        "terminal_value": terminal_value,
-        "discounted_terminal_value": discounted_terminal_value,
         "enterprise_value": enterprise_value,
         "equity_value": equity_value,
         "implied_price": implied_price
     }
 
-# -----------------------------
-# Inputs
-# -----------------------------
 st.subheader("Inputs")
 
 symbol = st.text_input("Enter Stock Ticker", "AAPL").upper()
-
 growth_rate = st.number_input("Revenue Growth Rate (%)", value=5.0, step=0.5) / 100
 tax_rate = st.number_input("Tax Rate (%)", value=21.0, step=0.5) / 100
 wacc = st.number_input("WACC (%)", value=9.0, step=0.5) / 100
@@ -101,9 +89,6 @@ net_debt = st.number_input("Net Debt ($)", value=0.0, step=1000000.0)
 
 run_button = st.button("Run Valuation")
 
-# -----------------------------
-# Main app
-# -----------------------------
 if run_button:
     try:
         ticker = yf.Ticker(symbol)
@@ -138,58 +123,43 @@ if run_button:
             projection_years=projection_years
         )
 
-        # -----------------------------
-        # Results
-        # -----------------------------
         st.subheader(f"Results for {company_name}")
 
-        r1, r2, r3 = st.columns(3)
-        r1.metric("Current Price", f"${current_price:,.2f}")
-        r2.metric("Implied Price", f"${base_results['implied_price']:,.2f}")
-        r3.metric("Enterprise Value", f"${base_results['enterprise_value']:,.0f}")
+        st.metric("Current Price", f"${current_price:,.2f}")
+        st.metric("Implied Price", f"${base_results['implied_price']:,.2f}")
+        st.metric("Enterprise Value", f"${base_results['enterprise_value']:,.0f}")
 
         if base_results["implied_price"] > current_price:
             st.success("📈 Stock appears UNDERVALUED based on your assumptions.")
         else:
             st.error("📉 Stock appears OVERVALUED based on your assumptions.")
 
-        # -----------------------------
-        # Projection table
-        # -----------------------------
         st.subheader("Projected Financials")
-
         projection_df = pd.DataFrame({
             "Year": list(range(1, projection_years + 1)),
             "Projected Revenue": base_results["projected_revenues"],
             "Projected FCF": base_results["projected_fcfs"],
             "Discounted FCF": base_results["discounted_fcfs"]
         })
-
         st.dataframe(projection_df, use_container_width=True)
 
-        # -----------------------------
-        # Charts
-        # -----------------------------
         st.subheader("Projection Charts")
-
         chart_df = projection_df.set_index("Year")[["Projected Revenue", "Projected FCF"]]
         st.line_chart(chart_df)
 
-        # -----------------------------
-        # Scenario Analysis
-        # -----------------------------
         st.subheader("Scenario Analysis")
 
-        st.write("Adjust Bear / Base / Bull assumptions below.")
-
+        st.markdown("**Bear Case**")
         bear_growth = st.number_input("Bear Growth (%)", value=max((growth_rate * 100) - 2, 0.0), key="bear_growth") / 100
         bear_wacc = st.number_input("Bear WACC (%)", value=(wacc * 100) + 1, key="bear_wacc") / 100
         bear_tg = st.number_input("Bear Terminal Growth (%)", value=max((terminal_growth * 100) - 0.5, 0.0), key="bear_tg") / 100
 
+        st.markdown("**Base Case**")
         base_growth_scn = st.number_input("Base Growth (%)", value=growth_rate * 100, key="base_growth") / 100
         base_wacc_scn = st.number_input("Base WACC (%)", value=wacc * 100, key="base_wacc") / 100
         base_tg_scn = st.number_input("Base Terminal Growth (%)", value=terminal_growth * 100, key="base_tg") / 100
 
+        st.markdown("**Bull Case**")
         bull_growth = st.number_input("Bull Growth (%)", value=(growth_rate * 100) + 2, key="bull_growth") / 100
         bull_wacc = st.number_input("Bull WACC (%)", value=max((wacc * 100) - 1, 0.0), key="bull_wacc") / 100
         bull_tg = st.number_input("Bull Terminal Growth (%)", value=(terminal_growth * 100) + 0.5, key="bull_tg") / 100
@@ -225,7 +195,7 @@ if run_button:
                     "Terminal Growth": f"{vals['tg']*100:.2f}%",
                     "Implied Price": round(scenario_result["implied_price"], 2)
                 })
-            except:
+            except Exception:
                 scenario_rows.append({
                     "Scenario": scenario_name,
                     "Growth Rate": f"{vals['growth']*100:.2f}%",
@@ -234,16 +204,9 @@ if run_button:
                     "Implied Price": "Invalid"
                 })
 
-        scenario_df = pd.DataFrame(scenario_rows)
-        st.dataframe(scenario_df, use_container_width=True)
+        st.dataframe(pd.DataFrame(scenario_rows), use_container_width=True)
 
-        # -----------------------------
-        # Sensitivity Analysis
-        # -----------------------------
         st.subheader("Sensitivity Analysis")
-
-        st.write("Enter comma-separated percentages.")
-
         wacc_input = st.text_input("WACC values (%)", "7,8,9,10")
         tg_input = st.text_input("Terminal Growth values (%)", "2,2.5,3")
 
@@ -271,7 +234,7 @@ if run_button:
                             projection_years=projection_years
                         )
                         row.append(round(sens_result["implied_price"], 2))
-                    except:
+                    except Exception:
                         row.append("Invalid")
 
                 sensitivity_table.append(row)
@@ -283,14 +246,8 @@ if run_button:
             )
 
             st.dataframe(sensitivity_df, use_container_width=True)
-
-        except:
+        except Exception:
             st.warning("Please enter valid comma-separated numeric values.")
-
-        # -----------------------------
-        # Footer
-        # -----------------------------
 
     except Exception as e:
         st.error(f"Something went wrong: {e}")
-        st.info("Try another ticker or check whether Yahoo Finance has the required fields for that company.")
