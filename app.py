@@ -130,25 +130,6 @@ st.markdown(
     .main {
         padding-top: 1rem;
     }
-    .hero-title {
-        text-align: center;
-        font-size: 3rem;
-        font-weight: 800;
-        margin-bottom: 0.25rem;
-    }
-    .hero-name {
-        text-align: center;
-        font-size: 1.35rem;
-        font-weight: 700;
-        color: #4FC3F7;
-        margin-bottom: 0.4rem;
-    }
-    .hero-subtitle {
-        text-align: center;
-        color: #AAB0B6;
-        font-size: 1rem;
-        margin-bottom: 1.5rem;
-    }
     .summary-box {
         border: 1px solid rgba(255,255,255,0.08);
         border-radius: 14px;
@@ -192,9 +173,17 @@ st.markdown(
 
 st.markdown(
     """
-    <div class="hero-title">DCF Valuation Tool</div>
-    <div class="hero-name">Nishtha Garg</div>
-    <div class="hero-subtitle">Interactive discounted cash flow model with scenario and sensitivity analysis</div>
+    <h1 style='text-align: center;'>DCF Valuation Tool</h1>
+
+    <p style='text-align: center; font-size:22px; font-weight: bold; color: #4FC3F7; margin-bottom: 5px;'>
+    Nishtha Garg
+    </p>
+
+    <p style='text-align: center; color: #BBBBBB; font-size:16px;'>
+    Interactive discounted cash flow model with scenario and sensitivity analysis
+    </p>
+
+    <hr style='margin-top:10px; margin-bottom:20px; border: 0.5px solid #333;'>
     """,
     unsafe_allow_html=True
 )
@@ -254,6 +243,17 @@ if run_button:
         enterprise_value = base_results["enterprise_value"]
         upside_downside = ((implied_price - current_price) / current_price) * 100 if current_price else 0
 
+        # Recommendation logic
+        if upside_downside >= 15:
+            recommendation = "BUY"
+            rec_color = "#16a34a"
+        elif upside_downside <= -15:
+            recommendation = "SELL"
+            rec_color = "#dc2626"
+        else:
+            recommendation = "HOLD"
+            rec_color = "#d97706"
+
         # -----------------------------
         # Results cards
         # -----------------------------
@@ -306,26 +306,21 @@ if run_button:
         if market_cap:
             st.caption(f"Market Cap: {format_dollar_short(market_cap)}")
 
-        # -----------------------------
-        # Valuation summary
-        # -----------------------------
-        view_text = "UNDERVALUED" if implied_price > current_price else "OVERVALUED"
-        color_box = "st.success" if implied_price > current_price else "st.error"
-
-        if implied_price > current_price:
-            st.success(f"📈 Based on your assumptions, {company_name} appears UNDERVALUED.")
-        else:
-            st.error(f"📉 Based on your assumptions, {company_name} appears OVERVALUED.")
-
+        # Recommendation box
         st.markdown(
             f"""
-            <div class="summary-box">
-                <div class="summary-title">Valuation Summary</div>
-                <div>
-                    Under your current assumptions — revenue growth of <b>{growth_rate*100:.1f}%</b>,
-                    WACC of <b>{wacc*100:.1f}%</b>, and terminal growth of <b>{terminal_growth*100:.1f}%</b> —
-                    the model estimates an implied value of <b>{format_dollar_short(implied_price)}</b> per share
-                    versus a current market price of <b>{format_dollar_short(current_price)}</b>.
+            <div class="summary-box" style="border-left: 5px solid {rec_color};">
+                <div class="summary-title">Recommendation</div>
+                <div style="font-size: 1.2rem; font-weight: 800; color: {rec_color}; margin-bottom: 8px;">
+                    {recommendation}
+                </div>
+                <div style="line-height:1.6;">
+                    Implied Equity Value: <b>{format_dollar_short(implied_price)}</b><br>
+                    Current Market Price: <b>{format_dollar_short(current_price)}</b><br>
+                    Upside / Downside: <b>{upside_downside:,.1f}%</b>
+                </div>
+                <div style="margin-top:10px; color:#AAAAAA; font-size:14px;">
+                    Assumptions: Revenue Growth {growth_rate*100:.1f}% | WACC {wacc*100:.1f}% | Terminal Growth {terminal_growth*100:.1f}%
                 </div>
             </div>
             """,
@@ -333,7 +328,7 @@ if run_button:
         )
 
         # -----------------------------
-        # Prettier table
+        # Projected Financials
         # -----------------------------
         st.markdown('<div class="section-label">Projected Financials</div>', unsafe_allow_html=True)
 
@@ -352,7 +347,7 @@ if run_button:
         st.dataframe(display_projection_df, use_container_width=True, hide_index=True)
 
         # -----------------------------
-        # Better charts
+        # Projection Charts
         # -----------------------------
         st.markdown('<div class="section-label">Projection Charts</div>', unsafe_allow_html=True)
 
@@ -390,7 +385,7 @@ if run_button:
         st.altair_chart(fcf_chart, use_container_width=True)
 
         # -----------------------------
-        # Scenario analysis
+        # Scenario Analysis
         # -----------------------------
         st.markdown('<div class="section-label">Scenario Analysis</div>', unsafe_allow_html=True)
 
@@ -452,7 +447,7 @@ if run_button:
         st.dataframe(pd.DataFrame(scenario_rows), use_container_width=True, hide_index=True)
 
         # -----------------------------
-        # Sensitivity analysis
+        # Sensitivity Analysis
         # -----------------------------
         st.markdown('<div class="section-label">Sensitivity Analysis</div>', unsafe_allow_html=True)
 
