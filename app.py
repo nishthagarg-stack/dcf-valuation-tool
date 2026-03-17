@@ -91,10 +91,12 @@ run_button = st.button("Run Valuation")
 
 if run_button:
     try:
-        ticker = yf.Ticker(symbol)
-        info = ticker.info
-        financials = ticker.financials
-        cashflow = ticker.cashflow
+        @st.cache_data
+def get_data(symbol):
+    ticker = yf.Ticker(symbol)
+    return ticker.info, ticker.financials, ticker.cashflow
+
+info, financials, cashflow = get_data(symbol)
 
         revenue = financials.loc["Total Revenue"].iloc[0]
         operating_income = financials.loc["Operating Income"].iloc[0]
