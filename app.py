@@ -1,6 +1,7 @@
 import streamlit as st
 import yfinance as yf
 import pandas as pd
+import altair as alt
 
 st.set_page_config(
     page_title="DCF Valuation Tool",
@@ -12,7 +13,7 @@ st.markdown(
     """
     <h1 style='text-align: center;'>DCF Valuation Tool</h1>
     <p style='text-align: center; font-size:22px; font-weight: bold; color: #4FC3F7;'>
-   By: Nishtha Garg
+    By: Nishtha Garg
     </p>
     <p style='text-align: center; color: #BBBBBB;'>
     Interactive discounted cash flow model with scenario and sensitivity analysis
@@ -21,10 +22,39 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-@st.cache_data(ttl=600)
-def get_data(symbol):
+@st.cache_data(ttl=1800)
+def get_market_and_financial_data(symbol):
     ticker = yf.Ticker(symbol)
-    return ticker.info, ticker.financials, ticker.cashflow
+
+    financials = ticker.financials
+    cashflow = ticker.cashflow
+
+    hist = ticker.history(period="5d")
+    current_price = None
+    if not hist.empty:
+        current_price = float(hist["Close"].iloc[-1])
+
+    shares_outstanding = None
+    company_name = symbol
+
+    try:
+        fast_info = ticker.fast_info
+        if hasattr(fast_info, "get"):
+            shares_outstanding = fast_info.get("shares")
+    except Exception:
+        pass
+
+    try:
+        info = ticker.info
+        company_name = info.get("longName", symbol)
+        if current_price is None:
+            current_price = info.get("currentPrice", 0)
+        if shares_outstanding is None:
+            shares_outstanding = info.get("sharesOutstanding")
+    except Exception:
+        pass
+
+    return company_name, current_price, shares_outstanding, financials, cashflow
 
 def run_dcf(
     base_revenue,
@@ -82,6 +112,15 @@ def run_dcf(
         "implied_price": implied_price
     }
 
+def format_dollar_short(value):
+    if value is None:
+        return "N/A"
+    if abs(value) >= 1_000_000_000:
+        return f"${value / 1_000_000_000:,.2f}B"
+    if abs(value) >= 1_000_000:
+        return f"${value / 1_000_000:,.2f}M"
+    return f"${value:,.2f}"
+
 st.subheader("Inputs")
 
 symbol = st.text_input("Enter Stock Ticker", "AAPL").upper()
@@ -96,16 +135,18 @@ run_button = st.button("Run Valuation")
 
 if run_button:
     try:
-        info, financials, cashflow = get_data(symbol)
+        company_name, current_price, shares_outstanding, financials, cashflow = get_market_and_financial_data(symbol)
 
         revenue = financials.loc["Total Revenue"].iloc[0]
         operating_income = financials.loc["Operating Income"].iloc[0]
         depreciation = cashflow.loc["Depreciation And Amortization"].iloc[0]
         capex = abs(cashflow.loc["Capital Expenditure"].iloc[0])
 
-        shares_outstanding = info.get("sharesOutstanding")
-        current_price = info.get("currentPrice", 0)
-        company_name = info.get("longName", symbol)
+        if shares_outstanding is None or shares_outstanding == 0:
+            raise ValueError("Could not retrieve shares outstanding for this ticker.")
+
+        if current_price is None:
+            current_price = 0
 
         ebit_margin = operating_income / revenue
         da_percent = depreciation / revenue
@@ -127,9 +168,13 @@ if run_button:
 
         st.subheader(f"Results for {company_name}")
 
-        st.metric("Current Price", f"${current_price:,.2f}")
-        st.metric("Implied Price", f"${base_results['implied_price']:,.2f}")
-        st.metric("Enterprise Value", f"${base_results['enterprise_value']:,.0f}")
+        c1, c2, c3 = st.columns(3)
+        c1.metric("Current Price", format_dollar_short(current_price))
+        c2.metric("Implied Price", format_dollar_short(base_results["implied_price"]))
+        c3.metric("Enterprise Value", format_dollar_short(base_results["enterprise_value"]))
+
+        upside_downside = ((base_results["implied_price"] - current_price) / current_price) * 100 if current_price else 0
+        st.metric("Upside / Downside", f"{upside_downside:,.1f}%")
 
         if base_results["implied_price"] > current_price:
             st.success("📈 Stock appears UNDERVALUED based on your assumptions.")
@@ -140,69 +185,60 @@ if run_button:
 
         projection_df = pd.DataFrame({
             "Year": list(range(1, projection_years + 1)),
-            "Projected Revenue": base_results["projected_revenues"],
-            "Projected FCF": base_results["projected_fcfs"],
-            "Discounted FCF": base_results["discounted_fcfs"]
+            "Projected Revenue ($M)": [x / 1_000_000 for x in base_results["projected_revenues"]],
+            "Projected FCF ($M)": [x / 1_000_000 for x in base_results["projected_fcfs"]],
+            "Discounted FCF ($M)": [x / 1_000_000 for x in base_results["discounted_fcfs"]],
         })
 
-        st.dataframe(projection_df, use_container_width=True)
+        styled_projection_df = projection_df.style.format({
+            "Projected Revenue ($M)": "${:,.1f}",
+            "Projected FCF ($M)": "${:,.1f}",
+            "Discounted FCF ($M)": "${:,.1f}",
+        })
+
+        st.dataframe(styled_projection_df, use_container_width=True)
 
         st.subheader("Projection Charts")
-        chart_df = projection_df.set_index("Year")[["Projected Revenue", "Projected FCF"]]
-        st.line_chart(chart_df)
+
+        revenue_chart_df = pd.DataFrame({
+            "Year": list(range(1, projection_years + 1)),
+            "Revenue ($M)": [x / 1_000_000 for x in base_results["projected_revenues"]]
+        })
+
+        fcf_chart_df = pd.DataFrame({
+            "Year": list(range(1, projection_years + 1)),
+            "FCF ($M)": [x / 1_000_000 for x in base_results["projected_fcfs"]]
+        })
+
+        revenue_chart = alt.Chart(revenue_chart_df).mark_line(point=True, color="#4FC3F7", strokeWidth=3).encode(
+            x=alt.X("Year:Q", axis=alt.Axis(labelAngle=0)),
+            y=alt.Y("Revenue ($M):Q", title="Revenue ($M)")
+        ).properties(height=300)
+
+        fcf_chart = alt.Chart(fcf_chart_df).mark_bar(color="#7E57C2").encode(
+            x=alt.X("Year:Q", axis=alt.Axis(labelAngle=0)),
+            y=alt.Y("FCF ($M):Q", title="FCF ($M)")
+        ).properties(height=300)
+
+        st.altair_chart(revenue_chart, use_container_width=True)
+        st.altair_chart(fcf_chart, use_container_width=True)
 
         st.subheader("Scenario Analysis")
 
         st.markdown("**Bear Case**")
-        bear_growth = st.number_input(
-            "Bear Growth (%)",
-            value=max((growth_rate * 100) - 2, 0.0),
-            key="bear_growth"
-        ) / 100
-        bear_wacc = st.number_input(
-            "Bear WACC (%)",
-            value=(wacc * 100) + 1,
-            key="bear_wacc"
-        ) / 100
-        bear_tg = st.number_input(
-            "Bear Terminal Growth (%)",
-            value=max((terminal_growth * 100) - 0.5, 0.0),
-            key="bear_tg"
-        ) / 100
+        bear_growth = st.number_input("Bear Growth (%)", value=max((growth_rate * 100) - 2, 0.0), key="bear_growth") / 100
+        bear_wacc = st.number_input("Bear WACC (%)", value=(wacc * 100) + 1, key="bear_wacc") / 100
+        bear_tg = st.number_input("Bear Terminal Growth (%)", value=max((terminal_growth * 100) - 0.5, 0.0), key="bear_tg") / 100
 
         st.markdown("**Base Case**")
-        base_growth_scn = st.number_input(
-            "Base Growth (%)",
-            value=growth_rate * 100,
-            key="base_growth"
-        ) / 100
-        base_wacc_scn = st.number_input(
-            "Base WACC (%)",
-            value=wacc * 100,
-            key="base_wacc"
-        ) / 100
-        base_tg_scn = st.number_input(
-            "Base Terminal Growth (%)",
-            value=terminal_growth * 100,
-            key="base_tg"
-        ) / 100
+        base_growth_scn = st.number_input("Base Growth (%)", value=growth_rate * 100, key="base_growth") / 100
+        base_wacc_scn = st.number_input("Base WACC (%)", value=wacc * 100, key="base_wacc") / 100
+        base_tg_scn = st.number_input("Base Terminal Growth (%)", value=terminal_growth * 100, key="base_tg") / 100
 
         st.markdown("**Bull Case**")
-        bull_growth = st.number_input(
-            "Bull Growth (%)",
-            value=(growth_rate * 100) + 2,
-            key="bull_growth"
-        ) / 100
-        bull_wacc = st.number_input(
-            "Bull WACC (%)",
-            value=max((wacc * 100) - 1, 0.0),
-            key="bull_wacc"
-        ) / 100
-        bull_tg = st.number_input(
-            "Bull Terminal Growth (%)",
-            value=(terminal_growth * 100) + 0.5,
-            key="bull_tg"
-        ) / 100
+        bull_growth = st.number_input("Bull Growth (%)", value=(growth_rate * 100) + 2, key="bull_growth") / 100
+        bull_wacc = st.number_input("Bull WACC (%)", value=max((wacc * 100) - 1, 0.0), key="bull_wacc") / 100
+        bull_tg = st.number_input("Bull Terminal Growth (%)", value=(terminal_growth * 100) + 0.5, key="bull_tg") / 100
 
         scenario_inputs = {
             "Bear": {"growth": bear_growth, "wacc": bear_wacc, "tg": bear_tg},
@@ -233,7 +269,7 @@ if run_button:
                     "Growth Rate": f"{vals['growth']*100:.2f}%",
                     "WACC": f"{vals['wacc']*100:.2f}%",
                     "Terminal Growth": f"{vals['tg']*100:.2f}%",
-                    "Implied Price": round(scenario_result["implied_price"], 2)
+                    "Implied Price": format_dollar_short(scenario_result["implied_price"])
                 })
             except Exception:
                 scenario_rows.append({
@@ -274,7 +310,7 @@ if run_button:
                             net_debt=net_debt,
                             projection_years=projection_years
                         )
-                        row.append(round(sens_result["implied_price"], 2))
+                        row.append(format_dollar_short(sens_result["implied_price"]))
                     except Exception:
                         row.append("Invalid")
 
