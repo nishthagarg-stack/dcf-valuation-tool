@@ -33,8 +33,8 @@ def get_market_and_financial_data(symbol):
 
     financials = ticker.financials
     cashflow = ticker.cashflow
-
     hist = ticker.history(period="5d")
+
     current_price = None
     if not hist.empty:
         current_price = float(hist["Close"].iloc[-1])
@@ -42,6 +42,8 @@ def get_market_and_financial_data(symbol):
     shares_outstanding = None
     company_name = symbol
     market_cap = None
+    trailing_pe = None
+    forward_pe = None
 
     try:
         fast_info = ticker.fast_info
@@ -60,10 +62,46 @@ def get_market_and_financial_data(symbol):
             shares_outstanding = info.get("sharesOutstanding")
         if market_cap is None:
             market_cap = info.get("marketCap")
+        trailing_pe = info.get("trailingPE")
+        forward_pe = info.get("forwardPE")
     except Exception:
         pass
 
-    return company_name, current_price, shares_outstanding, market_cap, financials, cashflow
+    return {
+        "company_name": company_name,
+        "current_price": current_price,
+        "shares_outstanding": shares_outstanding,
+        "market_cap": market_cap,
+        "trailing_pe": trailing_pe,
+        "forward_pe": forward_pe,
+        "financials": financials,
+        "cashflow": cashflow
+    }
+
+@st.cache_data(ttl=1800)
+def get_peer_metrics(tickers):
+    rows = []
+    for t in tickers:
+        try:
+            data = get_market_and_financial_data(t)
+            rows.append({
+                "Ticker": t,
+                "Company": data["company_name"],
+                "Market Cap": format_dollar_short(data["market_cap"]),
+                "Trailing P/E": round(data["trailing_pe"], 2) if data["trailing_pe"] else "N/A",
+                "Forward P/E": round(data["forward_pe"], 2) if data["forward_pe"] else "N/A",
+                "Current Price": format_dollar_short(data["current_price"])
+            })
+        except Exception:
+            rows.append({
+                "Ticker": t,
+                "Company": "Unavailable",
+                "Market Cap": "N/A",
+                "Trailing P/E": "N/A",
+                "Forward P/E": "N/A",
+                "Current Price": "N/A"
+            })
+    return pd.DataFrame(rows)
 
 def run_dcf(
     base_revenue,
@@ -127,44 +165,94 @@ def run_dcf(
 st.markdown(
     """
     <style>
+    body {
+        background-color: #0E1117;
+        color: #FAFAFA;
+    }
+
+    .stApp {
+        background: linear-gradient(180deg, #0E1117 0%, #121826 100%);
+        color: #FAFAFA;
+    }
+
     .main {
         padding-top: 1rem;
     }
+
+    h1, h2, h3, h4, h5, h6, p, label, div {
+        color: #FAFAFA;
+    }
+
+    .stTextInput > div > div > input,
+    .stNumberInput input,
+    .stTextArea textarea {
+        background-color: #1A1D24 !important;
+        color: #FFFFFF !important;
+        border-radius: 10px !important;
+        border: 1px solid #2A2F3A !important;
+    }
+
+    .stButton > button {
+        background-color: #4FC3F7 !important;
+        color: #0E1117 !important;
+        font-weight: 700 !important;
+        border-radius: 10px !important;
+        padding: 0.6rem 1.2rem !important;
+        border: none !important;
+    }
+
+    .stButton > button:hover {
+        background-color: #38BDF8 !important;
+        color: #0E1117 !important;
+    }
+
     .summary-box {
         border: 1px solid rgba(255,255,255,0.08);
         border-radius: 14px;
         padding: 1rem 1rem;
-        background: rgba(255,255,255,0.03);
+        background: #161A22;
         margin-top: 0.75rem;
         margin-bottom: 1rem;
     }
+
     .summary-title {
         font-size: 1rem;
         font-weight: 700;
         margin-bottom: 0.35rem;
     }
+
     .metric-card {
         border: 1px solid rgba(255,255,255,0.08);
         border-radius: 16px;
         padding: 1rem;
-        background: rgba(255,255,255,0.03);
+        background: #161A22;
         text-align: left;
         margin-bottom: 0.75rem;
     }
+
     .metric-label {
         color: #AAB0B6;
         font-size: 0.9rem;
         margin-bottom: 0.25rem;
     }
+
     .metric-value {
         font-size: 1.7rem;
         font-weight: 800;
+        color: #FFFFFF;
     }
+
     .section-label {
         font-size: 1.75rem;
         font-weight: 800;
         margin-top: 1.25rem;
         margin-bottom: 0.75rem;
+        color: #FFFFFF;
+    }
+
+    .stDataFrame {
+        border-radius: 12px;
+        overflow: hidden;
     }
     </style>
     """,
@@ -175,7 +263,7 @@ st.markdown(
     """
     <h1 style='text-align: center;'>DCF Valuation Tool</h1>
 
-    <p style='text-align: center; font-size:22px; font-weight: bold; color: #4FC3F7; margin-bottom: 5px;'>
+    <p style='text-align: center; font-size:22px; font-weight: bold; color: #4FC3F7; margin-bottom: 5px; text-shadow: 0 0 10px rgba(79,195,247,0.35);'>
     Nishtha Garg
     </p>
 
@@ -201,6 +289,8 @@ terminal_growth = st.number_input("Terminal Growth Rate (%)", value=2.5, step=0.
 projection_years = int(st.number_input("Projection Years", min_value=3, max_value=10, value=5, step=1))
 net_debt = st.number_input("Net Debt ($)", value=0.0, step=1000000.0)
 
+peer_input = st.text_input("Peer Tickers (comma-separated)", "MSFT,GOOGL,NVDA")
+
 run_button = st.button("Run Valuation")
 
 # -----------------------------
@@ -208,7 +298,15 @@ run_button = st.button("Run Valuation")
 # -----------------------------
 if run_button:
     try:
-        company_name, current_price, shares_outstanding, market_cap, financials, cashflow = get_market_and_financial_data(symbol)
+        data = get_market_and_financial_data(symbol)
+        company_name = data["company_name"]
+        current_price = data["current_price"] or 0
+        shares_outstanding = data["shares_outstanding"]
+        market_cap = data["market_cap"]
+        trailing_pe = data["trailing_pe"]
+        forward_pe = data["forward_pe"]
+        financials = data["financials"]
+        cashflow = data["cashflow"]
 
         revenue = financials.loc["Total Revenue"].iloc[0]
         operating_income = financials.loc["Operating Income"].iloc[0]
@@ -217,9 +315,6 @@ if run_button:
 
         if shares_outstanding is None or shares_outstanding == 0:
             raise ValueError("Could not retrieve shares outstanding for this ticker.")
-
-        if current_price is None:
-            current_price = 0
 
         ebit_margin = operating_income / revenue
         da_percent = depreciation / revenue
@@ -243,7 +338,6 @@ if run_button:
         enterprise_value = base_results["enterprise_value"]
         upside_downside = ((implied_price - current_price) / current_price) * 100 if current_price else 0
 
-        # Recommendation logic
         if upside_downside >= 15:
             recommendation = "BUY"
             rec_color = "#16a34a"
@@ -303,8 +397,28 @@ if run_button:
                 unsafe_allow_html=True
             )
 
-        if market_cap:
-            st.caption(f"Market Cap: {format_dollar_short(market_cap)}")
+        extra1, extra2 = st.columns(2)
+        with extra1:
+            st.markdown(
+                f"""
+                <div class="metric-card">
+                    <div class="metric-label">Market Cap</div>
+                    <div class="metric-value">{format_dollar_short(market_cap)}</div>
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
+        with extra2:
+            pe_display = f"Trailing P/E: {round(trailing_pe,2) if trailing_pe else 'N/A'} | Forward P/E: {round(forward_pe,2) if forward_pe else 'N/A'}"
+            st.markdown(
+                f"""
+                <div class="metric-card">
+                    <div class="metric-label">Valuation Multiples</div>
+                    <div style="font-size:1.1rem; font-weight:700; color:#FFFFFF;">{pe_display}</div>
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
 
         # Recommendation box
         st.markdown(
@@ -493,6 +607,15 @@ if run_button:
 
         except Exception:
             st.warning("Please enter valid comma-separated numeric values.")
+
+        # -----------------------------
+        # Peer comps
+        # -----------------------------
+        st.markdown('<div class="section-label">Peer Comparison</div>', unsafe_allow_html=True)
+        peer_list = [x.strip().upper() for x in peer_input.split(",") if x.strip()]
+        if peer_list:
+            peer_df = get_peer_metrics(peer_list)
+            st.dataframe(peer_df, use_container_width=True, hide_index=True)
 
     except Exception as e:
         st.error(f"Something went wrong: {e}")
