@@ -12,7 +12,7 @@ st.markdown(
     """
     <h1 style='text-align: center;'>DCF Valuation Tool</h1>
     <p style='text-align: center; font-size:22px; font-weight: bold; color: #4FC3F7;'>
-    By: Nishtha Garg
+   By: Nishtha Garg
     </p>
     <p style='text-align: center; color: #BBBBBB;'>
     Interactive discounted cash flow model with scenario and sensitivity analysis
@@ -20,6 +20,11 @@ st.markdown(
     """,
     unsafe_allow_html=True
 )
+
+@st.cache_data(ttl=600)
+def get_data(symbol):
+    ticker = yf.Ticker(symbol)
+    return ticker.info, ticker.financials, ticker.cashflow
 
 def run_dcf(
     base_revenue,
@@ -91,12 +96,7 @@ run_button = st.button("Run Valuation")
 
 if run_button:
     try:
-        @st.cache_data
-def get_data(symbol):
-    ticker = yf.Ticker(symbol)
-    return ticker.info, ticker.financials, ticker.cashflow
-
-info, financials, cashflow = get_data(symbol)
+        info, financials, cashflow = get_data(symbol)
 
         revenue = financials.loc["Total Revenue"].iloc[0]
         operating_income = financials.loc["Operating Income"].iloc[0]
@@ -137,12 +137,14 @@ info, financials, cashflow = get_data(symbol)
             st.error("📉 Stock appears OVERVALUED based on your assumptions.")
 
         st.subheader("Projected Financials")
+
         projection_df = pd.DataFrame({
             "Year": list(range(1, projection_years + 1)),
             "Projected Revenue": base_results["projected_revenues"],
             "Projected FCF": base_results["projected_fcfs"],
             "Discounted FCF": base_results["discounted_fcfs"]
         })
+
         st.dataframe(projection_df, use_container_width=True)
 
         st.subheader("Projection Charts")
@@ -152,19 +154,55 @@ info, financials, cashflow = get_data(symbol)
         st.subheader("Scenario Analysis")
 
         st.markdown("**Bear Case**")
-        bear_growth = st.number_input("Bear Growth (%)", value=max((growth_rate * 100) - 2, 0.0), key="bear_growth") / 100
-        bear_wacc = st.number_input("Bear WACC (%)", value=(wacc * 100) + 1, key="bear_wacc") / 100
-        bear_tg = st.number_input("Bear Terminal Growth (%)", value=max((terminal_growth * 100) - 0.5, 0.0), key="bear_tg") / 100
+        bear_growth = st.number_input(
+            "Bear Growth (%)",
+            value=max((growth_rate * 100) - 2, 0.0),
+            key="bear_growth"
+        ) / 100
+        bear_wacc = st.number_input(
+            "Bear WACC (%)",
+            value=(wacc * 100) + 1,
+            key="bear_wacc"
+        ) / 100
+        bear_tg = st.number_input(
+            "Bear Terminal Growth (%)",
+            value=max((terminal_growth * 100) - 0.5, 0.0),
+            key="bear_tg"
+        ) / 100
 
         st.markdown("**Base Case**")
-        base_growth_scn = st.number_input("Base Growth (%)", value=growth_rate * 100, key="base_growth") / 100
-        base_wacc_scn = st.number_input("Base WACC (%)", value=wacc * 100, key="base_wacc") / 100
-        base_tg_scn = st.number_input("Base Terminal Growth (%)", value=terminal_growth * 100, key="base_tg") / 100
+        base_growth_scn = st.number_input(
+            "Base Growth (%)",
+            value=growth_rate * 100,
+            key="base_growth"
+        ) / 100
+        base_wacc_scn = st.number_input(
+            "Base WACC (%)",
+            value=wacc * 100,
+            key="base_wacc"
+        ) / 100
+        base_tg_scn = st.number_input(
+            "Base Terminal Growth (%)",
+            value=terminal_growth * 100,
+            key="base_tg"
+        ) / 100
 
         st.markdown("**Bull Case**")
-        bull_growth = st.number_input("Bull Growth (%)", value=(growth_rate * 100) + 2, key="bull_growth") / 100
-        bull_wacc = st.number_input("Bull WACC (%)", value=max((wacc * 100) - 1, 0.0), key="bull_wacc") / 100
-        bull_tg = st.number_input("Bull Terminal Growth (%)", value=(terminal_growth * 100) + 0.5, key="bull_tg") / 100
+        bull_growth = st.number_input(
+            "Bull Growth (%)",
+            value=(growth_rate * 100) + 2,
+            key="bull_growth"
+        ) / 100
+        bull_wacc = st.number_input(
+            "Bull WACC (%)",
+            value=max((wacc * 100) - 1, 0.0),
+            key="bull_wacc"
+        ) / 100
+        bull_tg = st.number_input(
+            "Bull Terminal Growth (%)",
+            value=(terminal_growth * 100) + 0.5,
+            key="bull_tg"
+        ) / 100
 
         scenario_inputs = {
             "Bear": {"growth": bear_growth, "wacc": bear_wacc, "tg": bear_tg},
@@ -209,6 +247,7 @@ info, financials, cashflow = get_data(symbol)
         st.dataframe(pd.DataFrame(scenario_rows), use_container_width=True)
 
         st.subheader("Sensitivity Analysis")
+
         wacc_input = st.text_input("WACC values (%)", "7,8,9,10")
         tg_input = st.text_input("Terminal Growth values (%)", "2,2.5,3")
 
@@ -248,6 +287,7 @@ info, financials, cashflow = get_data(symbol)
             )
 
             st.dataframe(sensitivity_df, use_container_width=True)
+
         except Exception:
             st.warning("Please enter valid comma-separated numeric values.")
 
