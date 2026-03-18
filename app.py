@@ -367,6 +367,7 @@ def get_market_and_financial_data(symbol: str) -> dict:
 
     financials = ticker.financials
     cashflow = ticker.cashflow
+    balance_sheet = ticker.balance_sheet
     hist_1y = ticker.history(period="1y")
     hist_5d = ticker.history(period="5d")
 
@@ -431,6 +432,7 @@ def get_market_and_financial_data(symbol: str) -> dict:
         "industry": industry,
         "financials": financials,
         "cashflow": cashflow,
+        "balance_sheet": balance_sheet,
         "hist_1y": hist_1y,
     }
 
@@ -531,6 +533,52 @@ def run_dcf(
     }
 
 
+def build_forecast_model(
+    base_revenue,
+    ebit_margin,
+    da_percent,
+    capex_percent,
+    nwc_percent,
+    tax_rate,
+    growth_rate,
+    projection_years,
+):
+    rows = []
+    revenue_proj = base_revenue
+
+    for year in range(1, projection_years + 1):
+        revenue_proj = revenue_proj * (1 + growth_rate)
+        ebit = revenue_proj * ebit_margin
+        taxes = ebit * tax_rate
+        nopat = ebit * (1 - tax_rate)
+        da = revenue_proj * da_percent
+        capex = revenue_proj * capex_percent
+        change_nwc = revenue_proj * nwc_percent
+        fcf = nopat + da - capex - change_nwc
+
+        rows.append(
+            {
+                "Year": year,
+                "Revenue ($M)": revenue_proj / 1_000_000,
+                "EBIT ($M)": ebit / 1_000_000,
+                "Taxes ($M)": taxes / 1_000_000,
+                "NOPAT ($M)": nopat / 1_000_000,
+                "D&A ($M)": da / 1_000_000,
+                "CapEx ($M)": capex / 1_000_000,
+                "Change in NWC ($M)": change_nwc / 1_000_000,
+                "FCF ($M)": fcf / 1_000_000,
+                "EBIT Margin (%)": ebit_margin * 100,
+            }
+        )
+
+    forecast_df = pd.DataFrame(rows)
+
+    income_statement_df = forecast_df[["Year", "Revenue ($M)", "EBIT ($M)", "Taxes ($M)", "NOPAT ($M)"]].copy()
+    cashflow_df = forecast_df[["Year", "NOPAT ($M)", "D&A ($M)", "CapEx ($M)", "Change in NWC ($M)", "FCF ($M)"]].copy()
+
+    return forecast_df, income_statement_df, cashflow_df
+
+
 def get_recommendation(upside_downside: float):
     if upside_downside >= 20:
         return "STRONG BUY", "#16A34A"
@@ -549,6 +597,8 @@ def build_excel_file(
     scenario_df: pd.DataFrame,
     sensitivity_df: pd.DataFrame,
     peers_df: pd.DataFrame,
+    income_df: pd.DataFrame,
+    cashflow_df: pd.DataFrame,
 ) -> bytes:
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine="openpyxl") as writer:
@@ -557,6 +607,8 @@ def build_excel_file(
         scenario_df.to_excel(writer, sheet_name="Scenarios", index=False)
         sensitivity_df.to_excel(writer, sheet_name="Sensitivity", index=False)
         peers_df.to_excel(writer, sheet_name="Peers", index=False)
+        income_df.to_excel(writer, sheet_name="Forecast Income", index=False)
+        cashflow_df.to_excel(writer, sheet_name="Forecast Cash Flow", index=False)
     return output.getvalue()
 
 
@@ -583,6 +635,30 @@ def plot_price_chart(hist_df: pd.DataFrame, company_name: str):
         xaxis=dict(title="Date", gridcolor="#243041"),
         yaxis=dict(title="Price", gridcolor="#243041"),
         height=380,
+    )
+    return fig
+
+
+def plot_driver_chart(ebit_margin, da_percent, capex_percent, nwc_percent):
+    fig = go.Figure(
+        data=[
+            go.Bar(
+                x=["EBIT Margin", "D&A %", "CapEx %", "NWC %"],
+                y=[ebit_margin * 100, da_percent * 100, capex_percent * 100, nwc_percent * 100],
+                marker_color=["#38BDF8", "#22C55E", "#8B5CF6", "#F59E0B"],
+            )
+        ]
+    )
+    fig.update_layout(
+        title="Forecast Driver Assumptions",
+        template="plotly_dark",
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="#111827",
+        font=dict(color="#F9FAFB"),
+        margin=dict(l=20, r=20, t=50, b=20),
+        xaxis=dict(title="Driver"),
+        yaxis=dict(title="Percent"),
+        height=360,
     )
     return fig
 
@@ -626,7 +702,15 @@ with st.sidebar:
 
     page = st.radio(
         "Navigation",
-        ["Overview", "Market Data", "DCF Valuation", "Comps Valuation", "Sensitivity", "Export"],
+        [
+            "Overview",
+            "Market Data",
+            "Forecast Model",
+            "DCF Valuation",
+            "Comps Valuation",
+            "Sensitivity",
+            "Export",
+        ],
     )
 
     run_button = st.button("Run Model", use_container_width=True)
@@ -686,6 +770,17 @@ else:
             wacc=wacc,
             terminal_growth=terminal_growth,
             net_debt=net_debt,
+            projection_years=projection_years,
+        )
+
+        forecast_df, income_statement_df, cashflow_forecast_df = build_forecast_model(
+            base_revenue=revenue,
+            ebit_margin=ebit_margin_used,
+            da_percent=da_percent_used,
+            capex_percent=capex_percent_used,
+            nwc_percent=nwc_percent_used,
+            tax_rate=tax_rate,
+            growth_rate=growth_rate,
             projection_years=projection_years,
         )
 
@@ -838,6 +933,8 @@ else:
             scenario_df=scenario_df,
             sensitivity_df=sensitivity_df,
             peers_df=peer_df,
+            income_df=income_statement_df,
+            cashflow_df=cashflow_forecast_df,
         )
 
         st.caption(f"Matched Input: {company_name} ({resolved_symbol})")
@@ -919,6 +1016,67 @@ else:
 
             st.markdown('<div class="section-label">Peer Comparison</div>', unsafe_allow_html=True)
             st.markdown(html_table(peer_df), unsafe_allow_html=True)
+
+        elif page == "Forecast Model":
+            st.markdown('<div class="section-label">Forecast Model</div>', unsafe_allow_html=True)
+
+            st.plotly_chart(
+                plot_driver_chart(
+                    ebit_margin_used,
+                    da_percent_used,
+                    capex_percent_used,
+                    nwc_percent_used,
+                ),
+                use_container_width=True,
+            )
+
+            income_display = income_statement_df.copy()
+            for col in income_display.columns:
+                if col != "Year":
+                    income_display[col] = income_display[col].map(lambda x: f"${x:,.1f}")
+
+            cashflow_display = cashflow_forecast_df.copy()
+            for col in cashflow_display.columns:
+                if col != "Year":
+                    cashflow_display[col] = cashflow_display[col].map(lambda x: f"${x:,.1f}")
+
+            st.markdown('<div class="section-label">Forecast Income Statement</div>', unsafe_allow_html=True)
+            st.markdown(html_table(income_display), unsafe_allow_html=True)
+
+            st.markdown('<div class="section-label">Forecast Cash Flow Build</div>', unsafe_allow_html=True)
+            st.markdown(html_table(cashflow_display), unsafe_allow_html=True)
+
+            rev_fcf_fig = go.Figure()
+            rev_fcf_fig.add_trace(
+                go.Scatter(
+                    x=forecast_df["Year"],
+                    y=forecast_df["Revenue ($M)"],
+                    mode="lines+markers",
+                    name="Revenue ($M)",
+                    line=dict(color="#38BDF8", width=4),
+                )
+            )
+            rev_fcf_fig.add_trace(
+                go.Scatter(
+                    x=forecast_df["Year"],
+                    y=forecast_df["FCF ($M)"],
+                    mode="lines+markers",
+                    name="FCF ($M)",
+                    line=dict(color="#22C55E", width=4),
+                )
+            )
+            rev_fcf_fig.update_layout(
+                title="Revenue vs FCF Forecast",
+                template="plotly_dark",
+                paper_bgcolor="rgba(0,0,0,0)",
+                plot_bgcolor="#111827",
+                font=dict(color="#F9FAFB"),
+                margin=dict(l=20, r=20, t=50, b=20),
+                xaxis=dict(title="Year", gridcolor="#243041"),
+                yaxis=dict(title="$M", gridcolor="#243041"),
+                height=380,
+            )
+            st.plotly_chart(rev_fcf_fig, use_container_width=True)
 
         elif page == "DCF Valuation":
             st.markdown('<div class="section-label">DCF Valuation</div>', unsafe_allow_html=True)
@@ -1074,6 +1232,8 @@ else:
                         <br>• Scenario Analysis
                         <br>• Sensitivity Analysis
                         <br>• Peer Comparison
+                        <br>• Forecast Income Statement
+                        <br>• Forecast Cash Flow Build
                     </div>
                 </div>
                 """,
