@@ -1,25 +1,225 @@
 import io
 import re
-from typing import Dict, List, Optional, Tuple
+from typing import List, Optional, Tuple
 
 import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
 import yfinance as yf
 
-
 # -----------------------------
 # Page config
 # -----------------------------
 st.set_page_config(
-    page_title="DCF Valuation Tool",
+    page_title="Valuation Lab",
     page_icon="📈",
-    layout="centered"
+    layout="wide",
 )
 
+# -----------------------------
+# Styling
+# -----------------------------
+st.markdown(
+    """
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;800&display=swap" rel="stylesheet">
+
+    <style>
+    html, body, [class*="css"] {
+        font-family: 'Poppins', sans-serif;
+    }
+
+    .stApp {
+        background: radial-gradient(circle at top left, #0F1B3D 0%, #0B1020 45%, #070B14 100%);
+        color: #FAFAFA;
+    }
+
+    .block-container {
+        padding-top: 1.4rem;
+        padding-bottom: 2rem;
+    }
+
+    .brand-container {
+        text-align: center;
+        margin-bottom: 1.2rem;
+    }
+
+    .ng-badge {
+        display: inline-block;
+        padding: 12px 18px;
+        border-radius: 16px;
+        font-size: 20px;
+        font-weight: 800;
+        background: linear-gradient(135deg, #38BDF8, #6366F1);
+        color: white;
+        box-shadow: 0 0 20px rgba(56,189,248,0.35);
+        margin-bottom: 12px;
+        letter-spacing: 1px;
+    }
+
+    .title-text {
+        font-size: 38px;
+        font-weight: 800;
+        color: #FFFFFF;
+        letter-spacing: 1px;
+        margin-bottom: 4px;
+        text-shadow: 0 0 12px rgba(255,255,255,0.08);
+    }
+
+    .subtitle-text {
+        font-size: 16px;
+        color: #9CA3AF;
+        font-weight: 500;
+        letter-spacing: 0.5px;
+    }
+
+    .section-label {
+        font-size: 1.55rem;
+        font-weight: 800;
+        margin-top: 1rem;
+        margin-bottom: 0.8rem;
+        color: #FFFFFF;
+    }
+
+    .metric-card {
+        border: 1px solid rgba(255,255,255,0.08);
+        border-radius: 18px;
+        padding: 1rem;
+        background: rgba(17, 24, 39, 0.86);
+        backdrop-filter: blur(8px);
+        margin-bottom: 0.75rem;
+        min-height: 110px;
+    }
+
+    .metric-label {
+        color: #AAB0B6;
+        font-size: 0.92rem;
+        margin-bottom: 0.25rem;
+    }
+
+    .metric-value {
+        font-size: 1.55rem;
+        font-weight: 800;
+        color: #FFFFFF;
+    }
+
+    .summary-box {
+        border: 1px solid rgba(255,255,255,0.08);
+        border-radius: 18px;
+        padding: 1.1rem;
+        background: rgba(17, 24, 39, 0.86);
+        margin-top: 0.8rem;
+        margin-bottom: 1rem;
+    }
+
+    .summary-title {
+        font-size: 1rem;
+        font-weight: 700;
+        margin-bottom: 0.5rem;
+    }
+
+    .table-wrap {
+        background: rgba(17, 24, 39, 0.86);
+        border: 1px solid rgba(255,255,255,0.08);
+        border-radius: 18px;
+        overflow: hidden;
+        margin-bottom: 1rem;
+    }
+
+    .clean-table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 14px;
+    }
+
+    .clean-table thead tr {
+        background: #131C31;
+    }
+
+    .clean-table th {
+        text-align: left;
+        padding: 14px 16px;
+        color: #C9D1D9;
+        font-weight: 700;
+        border-bottom: 1px solid rgba(255,255,255,0.08);
+    }
+
+    .clean-table td {
+        padding: 14px 16px;
+        border-bottom: 1px solid rgba(255,255,255,0.06);
+        color: #F5F7FA;
+    }
+
+    .clean-table tbody tr:last-child td {
+        border-bottom: none;
+    }
+
+    .clean-table tbody tr:hover {
+        background: rgba(255,255,255,0.03);
+    }
+
+    .stTextInput > div > div > input,
+    .stNumberInput input {
+        background-color: #141B2D !important;
+        color: #FFFFFF !important;
+        border-radius: 12px !important;
+        border: 1px solid #25304A !important;
+    }
+
+    .stButton > button,
+    .stDownloadButton > button {
+        background: linear-gradient(90deg, #38BDF8 0%, #60A5FA 100%) !important;
+        color: #08101F !important;
+        font-weight: 700 !important;
+        border-radius: 12px !important;
+        padding: 0.65rem 1.2rem !important;
+        border: none !important;
+    }
+
+    section[data-testid="stSidebar"] {
+        background: rgba(10, 14, 25, 0.95);
+    }
+
+    .sidebar-brand {
+        text-align: center;
+        margin-bottom: 1rem;
+    }
+
+    .sidebar-ng {
+        display: inline-block;
+        padding: 10px 14px;
+        border-radius: 14px;
+        font-size: 18px;
+        font-weight: 800;
+        background: linear-gradient(135deg, #38BDF8, #6366F1);
+        color: white;
+        margin-bottom: 10px;
+    }
+
+    .small-note {
+        color: #9CA3AF;
+        font-size: 13px;
+    }
+    </style>
+    """,
+    unsafe_allow_html=True,
+)
 
 # -----------------------------
-# Formatting helpers
+# Branding
+# -----------------------------
+st.markdown(
+    """
+    <div class="brand-container">
+        <div class="ng-badge">NG</div>
+        <div class="title-text">Valuation Lab</div>
+        <div class="subtitle-text">by Nishtha Garg</div>
+    </div>
+    """,
+    unsafe_allow_html=True,
+)
+
+# -----------------------------
+# Helpers
 # -----------------------------
 def format_dollar_short(value):
     if value is None or pd.isna(value):
@@ -64,66 +264,41 @@ def is_probable_ticker(query: str) -> bool:
     return bool(re.fullmatch(r"[A-Z.\-]{1,6}", q))
 
 
-# -----------------------------
-# Peer suggestion maps
-# -----------------------------
 PEER_MAP = {
     "AAPL": ["MSFT", "GOOGL", "NVDA", "AMZN"],
     "MSFT": ["AAPL", "GOOGL", "ORCL", "NVDA"],
     "GOOGL": ["META", "MSFT", "AMZN", "NFLX"],
-    "META": ["GOOGL", "SNAP", "PINS", "NFLX"],
+    "META": ["GOOGL", "NFLX", "SNAP", "PINS"],
     "NVDA": ["AMD", "INTC", "AVGO", "QCOM"],
     "AMD": ["NVDA", "INTC", "AVGO", "QCOM"],
-    "AMZN": ["WMT", "COST", "BABA", "SHOP"],
+    "AMZN": ["WMT", "COST", "SHOP", "BABA"],
     "TSLA": ["GM", "F", "RIVN", "LCID"],
     "JPM": ["BAC", "C", "WFC", "GS"],
-    "BAC": ["JPM", "C", "WFC", "MS"],
-    "GS": ["MS", "JPM", "BAC", "C"],
     "NFLX": ["DIS", "WBD", "GOOGL", "META"],
-    "KO": ["PEP", "MNST", "KDP", "CELH"],
-    "PEP": ["KO", "KDP", "MNST", "WMT"],
-    "WMT": ["TGT", "COST", "AMZN", "KR"],
-    "COST": ["WMT", "TGT", "KR", "AMZN"],
     "ORCL": ["MSFT", "SAP", "CRM", "IBM"],
-    "CRM": ["ORCL", "MSFT", "NOW", "ADBE"],
-    "ADBE": ["CRM", "MSFT", "NOW", "INTU"],
-    "INTC": ["AMD", "NVDA", "QCOM", "AVGO"],
-    "AVGO": ["QCOM", "AMD", "NVDA", "INTC"],
+    "CRM": ["ORCL", "MSFT", "ADBE", "NOW"],
 }
 
 SECTOR_PEERS = {
     "Technology": ["MSFT", "AAPL", "NVDA", "ORCL"],
-    "Consumer Cyclical": ["AMZN", "TSLA", "HD", "MCD"],
-    "Financial Services": ["JPM", "BAC", "GS", "MS"],
-    "Healthcare": ["JNJ", "PFE", "MRK", "ABBV"],
     "Communication Services": ["GOOGL", "META", "NFLX", "DIS"],
+    "Financial Services": ["JPM", "BAC", "GS", "MS"],
     "Consumer Defensive": ["PG", "KO", "PEP", "WMT"],
-    "Industrials": ["GE", "CAT", "DE", "HON"],
-    "Energy": ["XOM", "CVX", "COP", "SLB"],
-    "Utilities": ["NEE", "DUK", "SO", "AEP"],
-    "Real Estate": ["PLD", "AMT", "SPG", "EQIX"],
-    "Basic Materials": ["LIN", "APD", "SHW", "ECL"],
+    "Consumer Cyclical": ["AMZN", "TSLA", "HD", "MCD"],
 }
 
 
-# -----------------------------
-# Data access
-# -----------------------------
 @st.cache_data(ttl=1800)
-def resolve_company_input(query: str) -> Dict:
-    """
-    Resolve user input (company name or ticker) to a ticker symbol.
-    """
+def resolve_company_input(query: str) -> dict:
     clean_query = query.strip()
     if not clean_query:
         raise ValueError("Please enter a company name or ticker.")
 
     if is_probable_ticker(clean_query):
-        symbol = clean_query.upper()
         return {
-            "symbol": symbol,
-            "matched_name": symbol,
-            "source": "ticker"
+            "symbol": clean_query.upper(),
+            "matched_name": clean_query.upper(),
+            "source": "ticker",
         }
 
     try:
@@ -141,7 +316,7 @@ def resolve_company_input(query: str) -> Dict:
             return {
                 "symbol": symbol,
                 "matched_name": matched_name,
-                "source": "search"
+                "source": "search",
             }
     except Exception:
         pass
@@ -149,21 +324,22 @@ def resolve_company_input(query: str) -> Dict:
     return {
         "symbol": clean_query.upper(),
         "matched_name": clean_query,
-        "source": "fallback"
+        "source": "fallback",
     }
 
 
 @st.cache_data(ttl=1800)
-def get_market_and_financial_data(symbol: str) -> Dict:
+def get_market_and_financial_data(symbol: str) -> dict:
     ticker = yf.Ticker(symbol)
 
     financials = ticker.financials
     cashflow = ticker.cashflow
-    hist = ticker.history(period="5d")
+    hist_1y = ticker.history(period="1y")
+    hist_5d = ticker.history(period="5d")
 
     current_price = None
-    if not hist.empty:
-        current_price = float(hist["Close"].iloc[-1])
+    if not hist_5d.empty:
+        current_price = float(hist_5d["Close"].iloc[-1])
 
     shares_outstanding = None
     company_name = symbol
@@ -213,17 +389,16 @@ def get_market_and_financial_data(symbol: str) -> Dict:
         "sector": sector,
         "industry": industry,
         "financials": financials,
-        "cashflow": cashflow
+        "cashflow": cashflow,
+        "hist_1y": hist_1y,
     }
 
 
 def suggest_peers(symbol: str, sector: Optional[str]) -> List[str]:
     if symbol in PEER_MAP:
         return [x for x in PEER_MAP[symbol] if x != symbol]
-
     if sector in SECTOR_PEERS:
         return [x for x in SECTOR_PEERS[sector] if x != symbol]
-
     return ["MSFT", "GOOGL", "NVDA", "AMZN"] if symbol != "MSFT" else ["AAPL", "GOOGL", "NVDA", "ORCL"]
 
 
@@ -233,29 +408,30 @@ def get_peer_metrics(tickers: Tuple[str, ...]) -> pd.DataFrame:
     for t in tickers:
         try:
             data = get_market_and_financial_data(t)
-            rows.append({
-                "Ticker": t,
-                "Company": data["company_name"],
-                "Market Cap": format_dollar_short(data["market_cap"]),
-                "Trailing P/E": round(data["trailing_pe"], 2) if data["trailing_pe"] else "N/A",
-                "Forward P/E": round(data["forward_pe"], 2) if data["forward_pe"] else "N/A",
-                "Current Price": format_dollar_short(data["current_price"])
-            })
+            rows.append(
+                {
+                    "Ticker": t,
+                    "Company": data["company_name"],
+                    "Market Cap": format_dollar_short(data["market_cap"]),
+                    "Trailing P/E": round(data["trailing_pe"], 2) if data["trailing_pe"] else "N/A",
+                    "Forward P/E": round(data["forward_pe"], 2) if data["forward_pe"] else "N/A",
+                    "Current Price": format_dollar_short(data["current_price"]),
+                }
+            )
         except Exception:
-            rows.append({
-                "Ticker": t,
-                "Company": "Unavailable",
-                "Market Cap": "N/A",
-                "Trailing P/E": "N/A",
-                "Forward P/E": "N/A",
-                "Current Price": "N/A"
-            })
+            rows.append(
+                {
+                    "Ticker": t,
+                    "Company": "Unavailable",
+                    "Market Cap": "N/A",
+                    "Trailing P/E": "N/A",
+                    "Forward P/E": "N/A",
+                    "Current Price": "N/A",
+                }
+            )
     return pd.DataFrame(rows)
 
 
-# -----------------------------
-# Valuation logic
-# -----------------------------
 def run_dcf(
     base_revenue,
     ebit_margin,
@@ -267,7 +443,7 @@ def run_dcf(
     wacc,
     terminal_growth,
     net_debt,
-    projection_years
+    projection_years,
 ):
     projected_revenues = []
     projected_fcfs = []
@@ -287,9 +463,7 @@ def run_dcf(
 
         fcf = nopat + da - capex_proj - nwc
         projected_fcfs.append(fcf)
-
-        discounted_fcf = fcf / ((1 + wacc) ** year)
-        discounted_fcfs.append(discounted_fcf)
+        discounted_fcfs.append(fcf / ((1 + wacc) ** year))
 
     final_fcf = projected_fcfs[-1]
 
@@ -309,11 +483,11 @@ def run_dcf(
         "discounted_fcfs": discounted_fcfs,
         "enterprise_value": enterprise_value,
         "equity_value": equity_value,
-        "implied_price": implied_price
+        "implied_price": implied_price,
     }
 
 
-def get_recommendation(upside_downside: float) -> Tuple[str, str]:
+def get_recommendation(upside_downside: float):
     if upside_downside >= 20:
         return "STRONG BUY", "#16A34A"
     if upside_downside >= 10:
@@ -330,7 +504,7 @@ def build_excel_file(
     projection_df: pd.DataFrame,
     scenario_df: pd.DataFrame,
     sensitivity_df: pd.DataFrame,
-    peers_df: pd.DataFrame
+    peers_df: pd.DataFrame,
 ) -> bytes:
     output = io.BytesIO()
     with pd.ExcelWriter(output, engine="openpyxl") as writer:
@@ -342,186 +516,74 @@ def build_excel_file(
     return output.getvalue()
 
 
-# -----------------------------
-# Styling
-# -----------------------------
-st.markdown(
-    """
-    <style>
-    body {
-        background-color: #0B1020;
-        color: #FAFAFA;
-    }
+def plot_price_chart(hist_df: pd.DataFrame, company_name: str):
+    fig = go.Figure()
+    fig.add_trace(
+        go.Scatter(
+            x=hist_df.index,
+            y=hist_df["Close"],
+            mode="lines",
+            line=dict(color="#38BDF8", width=3),
+            fill="tozeroy",
+            fillcolor="rgba(56,189,248,0.10)",
+            name="Close",
+        )
+    )
+    fig.update_layout(
+        title=f"{company_name} Price Chart (1Y)",
+        template="plotly_dark",
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="#111827",
+        font=dict(color="#F9FAFB"),
+        margin=dict(l=20, r=20, t=50, b=20),
+        xaxis=dict(title="Date", gridcolor="#243041"),
+        yaxis=dict(title="Price", gridcolor="#243041"),
+        height=380,
+    )
+    return fig
 
-    .stApp {
-        background: radial-gradient(circle at top left, #0F1B3D 0%, #0B1020 45%, #070B14 100%);
-        color: #FAFAFA;
-    }
-
-    .main {
-        padding-top: 1rem;
-    }
-
-    h1, h2, h3, h4, h5, h6, p, label, div {
-        color: #FAFAFA;
-    }
-
-    .stTextInput > div > div > input,
-    .stNumberInput input {
-        background-color: #141B2D !important;
-        color: #FFFFFF !important;
-        border-radius: 12px !important;
-        border: 1px solid #25304A !important;
-    }
-
-    .stButton > button {
-        background: linear-gradient(90deg, #38BDF8 0%, #60A5FA 100%) !important;
-        color: #08101F !important;
-        font-weight: 700 !important;
-        border-radius: 12px !important;
-        padding: 0.65rem 1.2rem !important;
-        border: none !important;
-    }
-
-    .stButton > button:hover {
-        opacity: 0.92;
-    }
-
-    .brand-pill {
-        width: 54px;
-        height: 54px;
-        border-radius: 16px;
-        margin: 0 auto 10px auto;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        font-weight: 800;
-        font-size: 20px;
-        color: #08101F;
-        background: linear-gradient(135deg, #38BDF8 0%, #60A5FA 100%);
-        box-shadow: 0 0 20px rgba(56, 189, 248, 0.20);
-    }
-
-    .metric-card {
-        border: 1px solid rgba(255,255,255,0.08);
-        border-radius: 18px;
-        padding: 1rem;
-        background: rgba(17, 24, 39, 0.86);
-        backdrop-filter: blur(8px);
-        margin-bottom: 0.75rem;
-    }
-
-    .metric-label {
-        color: #AAB0B6;
-        font-size: 0.9rem;
-        margin-bottom: 0.25rem;
-    }
-
-    .metric-value {
-        font-size: 1.65rem;
-        font-weight: 800;
-        color: #FFFFFF;
-    }
-
-    .summary-box {
-        border: 1px solid rgba(255,255,255,0.08);
-        border-radius: 18px;
-        padding: 1.1rem;
-        background: rgba(17, 24, 39, 0.86);
-        margin-top: 0.8rem;
-        margin-bottom: 1rem;
-    }
-
-    .summary-title {
-        font-size: 1rem;
-        font-weight: 700;
-        margin-bottom: 0.5rem;
-    }
-
-    .section-label {
-        font-size: 1.75rem;
-        font-weight: 800;
-        margin-top: 1.5rem;
-        margin-bottom: 0.8rem;
-        color: #FFFFFF;
-    }
-
-    .table-wrap {
-        background: rgba(17, 24, 39, 0.86);
-        border: 1px solid rgba(255,255,255,0.08);
-        border-radius: 18px;
-        overflow: hidden;
-        margin-bottom: 1rem;
-    }
-
-    .clean-table {
-        width: 100%;
-        border-collapse: collapse;
-        font-size: 15px;
-    }
-
-    .clean-table thead tr {
-        background: #131C31;
-    }
-
-    .clean-table th {
-        text-align: left;
-        padding: 14px 16px;
-        color: #C9D1D9;
-        font-weight: 700;
-        border-bottom: 1px solid rgba(255,255,255,0.08);
-    }
-
-    .clean-table td {
-        padding: 14px 16px;
-        border-bottom: 1px solid rgba(255,255,255,0.06);
-        color: #F5F7FA;
-    }
-
-    .clean-table tbody tr:last-child td {
-        border-bottom: none;
-    }
-
-    .clean-table tbody tr:hover {
-        background: rgba(255,255,255,0.03);
-    }
-    </style>
-    """,
-    unsafe_allow_html=True
-)
-
-st.markdown(
-    """
-    <div class="brand-pill">NG</div>
-    <h1 style='text-align: center;'>DCF Valuation Tool</h1>
-    <p style='text-align: center; font-size:22px; font-weight: bold; color: #4FC3F7; margin-bottom: 5px; text-shadow: 0 0 12px rgba(79,195,247,0.35);'>
-    Nishtha Garg
-    </p>
-    <p style='text-align: center; color: #B8C0CC; font-size:16px;'>
-    Interactive discounted cash flow model with scenario analysis, sensitivity analysis, and comps
-    </p>
-    <hr style='margin-top:10px; margin-bottom:24px; border: 0.5px solid #22304C;'>
-    """,
-    unsafe_allow_html=True
-)
 
 # -----------------------------
-# Inputs
+# Sidebar
 # -----------------------------
-st.markdown('<div class="section-label">Inputs</div>', unsafe_allow_html=True)
+with st.sidebar:
+    st.markdown(
+        """
+        <div class="sidebar-brand">
+            <div class="sidebar-ng">NG</div>
+            <div style="font-weight:800; font-size:18px;">Valuation Lab</div>
+            <div class="small-note">by Nishtha Garg</div>
+        </div>
+        """,
+        unsafe_allow_html=True,
+    )
 
-company_input = st.text_input("Enter Company Name or Ticker", "Apple")
-growth_rate = st.number_input("Revenue Growth Rate (%)", value=5.0, step=0.5) / 100
-tax_rate = st.number_input("Tax Rate (%)", value=21.0, step=0.5) / 100
-wacc = st.number_input("WACC (%)", value=9.0, step=0.5) / 100
-terminal_growth = st.number_input("Terminal Growth Rate (%)", value=2.5, step=0.5) / 100
-projection_years = int(st.number_input("Projection Years", min_value=3, max_value=10, value=5, step=1))
-net_debt = st.number_input("Net Debt ($)", value=0.0, step=1000000.0)
-manual_peers = st.text_input("Optional: Override Peer Tickers", "")
+    st.markdown("---")
 
-run_button = st.button("Run Valuation")
+    company_input = st.text_input("Company Name or Ticker", "Apple")
+    growth_rate = st.number_input("Revenue Growth Rate (%)", value=5.0, step=0.5) / 100
+    tax_rate = st.number_input("Tax Rate (%)", value=21.0, step=0.5) / 100
+    wacc = st.number_input("WACC (%)", value=9.0, step=0.5) / 100
+    terminal_growth = st.number_input("Terminal Growth Rate (%)", value=2.5, step=0.5) / 100
+    projection_years = int(st.number_input("Projection Years", min_value=3, max_value=10, value=5, step=1))
+    net_debt = st.number_input("Net Debt ($)", value=0.0, step=1000000.0)
+    manual_peers = st.text_input("Override Peer Tickers", "")
 
-if run_button:
+    st.markdown("---")
+
+    page = st.radio(
+        "Navigation",
+        ["Overview", "Market Data", "DCF Valuation", "Comps Valuation", "Sensitivity", "Export"],
+    )
+
+    run_button = st.button("Run Model", use_container_width=True)
+
+# -----------------------------
+# Main app
+# -----------------------------
+if not run_button:
+    st.info("Enter a company in the sidebar and click **Run Model** to load the platform.")
+else:
     try:
         resolved = resolve_company_input(company_input)
         resolved_symbol = resolved["symbol"]
@@ -536,18 +598,18 @@ if run_button:
         trailing_eps = data["trailing_eps"]
         forward_eps = data["forward_eps"]
         sector = data["sector"]
+        industry = data["industry"]
         financials = data["financials"]
         cashflow = data["cashflow"]
+        hist_1y = data["hist_1y"]
 
-        st.caption(f"Matched Input: {company_name} ({resolved_symbol})")
+        if shares_outstanding is None or shares_outstanding == 0:
+            raise ValueError("Could not retrieve shares outstanding for this company.")
 
         revenue = financials.loc["Total Revenue"].iloc[0]
         operating_income = financials.loc["Operating Income"].iloc[0]
         depreciation = cashflow.loc["Depreciation And Amortization"].iloc[0]
         capex = abs(cashflow.loc["Capital Expenditure"].iloc[0])
-
-        if shares_outstanding is None or shares_outstanding == 0:
-            raise ValueError("Could not retrieve shares outstanding for this company.")
 
         ebit_margin = operating_income / revenue
         da_percent = depreciation / revenue
@@ -564,7 +626,7 @@ if run_button:
             wacc=wacc,
             terminal_growth=terminal_growth,
             net_debt=net_debt,
-            projection_years=projection_years
+            projection_years=projection_years,
         )
 
         implied_price = base_results["implied_price"]
@@ -572,200 +634,37 @@ if run_button:
         upside_downside = ((implied_price - current_price) / current_price) * 100 if current_price else 0
         recommendation, rec_color = get_recommendation(upside_downside)
 
-        # -----------------------------
-        # Suggested peers / override
-        # -----------------------------
         suggested_peers = suggest_peers(resolved_symbol, sector)
-        if manual_peers.strip():
-            peer_list = [x.strip().upper() for x in manual_peers.split(",") if x.strip()]
-        else:
-            peer_list = suggested_peers
+        peer_list = [x.strip().upper() for x in manual_peers.split(",") if x.strip()] if manual_peers.strip() else suggested_peers
+        peer_df = get_peer_metrics(tuple(peer_list))
 
-        st.caption(f"Suggested Peers: {', '.join(suggested_peers)}")
+        # comps valuation
+        peer_raw_rows = []
+        for peer in peer_list:
+            try:
+                pdata = get_market_and_financial_data(peer)
+                peer_raw_rows.append(
+                    {
+                        "Ticker": peer,
+                        "Trailing P/E": pdata["trailing_pe"],
+                        "Forward P/E": pdata["forward_pe"],
+                    }
+                )
+            except Exception:
+                continue
 
-        # -----------------------------
-        # Results
-        # -----------------------------
-        st.markdown(f'<div class="section-label">Results for {company_name}</div>', unsafe_allow_html=True)
+        peer_raw_df = pd.DataFrame(peer_raw_rows)
+        avg_trailing_pe = pd.to_numeric(peer_raw_df.get("Trailing P/E"), errors="coerce").dropna().mean() if not peer_raw_df.empty else None
+        avg_forward_pe = pd.to_numeric(peer_raw_df.get("Forward P/E"), errors="coerce").dropna().mean() if not peer_raw_df.empty else None
 
-        c1, c2 = st.columns(2)
-        with c1:
-            st.markdown(
-                f"""
-                <div class="metric-card">
-                    <div class="metric-label">Current Price</div>
-                    <div class="metric-value">{format_dollar_short(current_price)}</div>
-                </div>
-                """,
-                unsafe_allow_html=True
-            )
-        with c2:
-            st.markdown(
-                f"""
-                <div class="metric-card">
-                    <div class="metric-label">Implied Price</div>
-                    <div class="metric-value">{format_dollar_short(implied_price)}</div>
-                </div>
-                """,
-                unsafe_allow_html=True
-            )
+        trailing_comps_value = avg_trailing_pe * trailing_eps if avg_trailing_pe and trailing_eps else None
+        forward_comps_value = avg_forward_pe * forward_eps if avg_forward_pe and forward_eps else None
 
-        c3, c4 = st.columns(2)
-        with c3:
-            st.markdown(
-                f"""
-                <div class="metric-card">
-                    <div class="metric-label">Enterprise Value</div>
-                    <div class="metric-value">{format_dollar_short(enterprise_value)}</div>
-                </div>
-                """,
-                unsafe_allow_html=True
-            )
-        with c4:
-            st.markdown(
-                f"""
-                <div class="metric-card">
-                    <div class="metric-label">Upside / Downside</div>
-                    <div class="metric-value">{format_percent(upside_downside)}</div>
-                </div>
-                """,
-                unsafe_allow_html=True
-            )
-
-        c5, c6 = st.columns(2)
-        with c5:
-            st.markdown(
-                f"""
-                <div class="metric-card">
-                    <div class="metric-label">Market Cap</div>
-                    <div class="metric-value">{format_dollar_short(market_cap)}</div>
-                </div>
-                """,
-                unsafe_allow_html=True
-            )
-        with c6:
-            pe_display = f"Trailing P/E: {round(trailing_pe, 2) if trailing_pe else 'N/A'} | Forward P/E: {round(forward_pe, 2) if forward_pe else 'N/A'}"
-            st.markdown(
-                f"""
-                <div class="metric-card">
-                    <div class="metric-label">Valuation Multiples</div>
-                    <div style="font-size:1.05rem; font-weight:700; color:#FFFFFF;">{pe_display}</div>
-                </div>
-                """,
-                unsafe_allow_html=True
-            )
-
-        st.markdown(
-            f"""
-            <div class="summary-box" style="border-left: 5px solid {rec_color};">
-                <div class="summary-title">Recommendation</div>
-                <div style="font-size: 1.35rem; font-weight: 800; color: {rec_color}; margin-bottom: 10px;">
-                    {recommendation}
-                </div>
-                <div style="line-height:1.7; font-size:1.05rem;">
-                    Implied Equity Value: <b>{format_dollar_short(implied_price)}</b><br>
-                    Current Market Price: <b>{format_dollar_short(current_price)}</b><br>
-                    Upside / Downside: <b>{upside_downside:,.1f}%</b>
-                </div>
-                <div style="margin-top:12px; color:#AAB0B6; font-size:14px;">
-                    Assumptions: Revenue Growth {growth_rate*100:.1f}% | WACC {wacc*100:.1f}% | Terminal Growth {terminal_growth*100:.1f}%
-                </div>
-            </div>
-            """,
-            unsafe_allow_html=True
-        )
-
-        # -----------------------------
-        # Projected financials
-        # -----------------------------
-        st.markdown('<div class="section-label">Projected Financials</div>', unsafe_allow_html=True)
-
-        projection_df_display = pd.DataFrame({
-            "Year": list(range(1, projection_years + 1)),
-            "Projected Revenue ($M)": [f"${x / 1_000_000:,.1f}" for x in base_results["projected_revenues"]],
-            "Projected FCF ($M)": [f"${x / 1_000_000:,.1f}" for x in base_results["projected_fcfs"]],
-            "Discounted FCF ($M)": [f"${x / 1_000_000:,.1f}" for x in base_results["discounted_fcfs"]],
-        })
-        st.markdown(html_table(projection_df_display), unsafe_allow_html=True)
-
-        # -----------------------------
-        # Charts
-        # -----------------------------
-        st.markdown('<div class="section-label">Projection Charts</div>', unsafe_allow_html=True)
-
-        years = list(range(1, projection_years + 1))
-        revenue_values = [x / 1_000_000 for x in base_results["projected_revenues"]]
-        fcf_values = [x / 1_000_000 for x in base_results["projected_fcfs"]]
-
-        revenue_fig = go.Figure()
-        revenue_fig.add_trace(
-            go.Scatter(
-                x=years,
-                y=revenue_values,
-                mode="lines+markers",
-                line=dict(color="#38BDF8", width=4),
-                marker=dict(size=8, color="#38BDF8"),
-                name="Revenue"
-            )
-        )
-        revenue_fig.update_layout(
-            title="Revenue Forecast",
-            template="plotly_dark",
-            paper_bgcolor="rgba(0,0,0,0)",
-            plot_bgcolor="#111827",
-            font=dict(color="#F9FAFB"),
-            margin=dict(l=20, r=20, t=50, b=20),
-            xaxis=dict(title="Year", gridcolor="#243041"),
-            yaxis=dict(title="Revenue ($M)", gridcolor="#243041"),
-        )
-
-        fcf_fig = go.Figure()
-        fcf_fig.add_trace(
-            go.Bar(
-                x=years,
-                y=fcf_values,
-                marker=dict(color="#8B5CF6"),
-                name="FCF"
-            )
-        )
-        fcf_fig.update_layout(
-            title="Free Cash Flow Forecast",
-            template="plotly_dark",
-            paper_bgcolor="rgba(0,0,0,0)",
-            plot_bgcolor="#111827",
-            font=dict(color="#F9FAFB"),
-            margin=dict(l=20, r=20, t=50, b=20),
-            xaxis=dict(title="Year", gridcolor="#243041"),
-            yaxis=dict(title="FCF ($M)", gridcolor="#243041"),
-        )
-
-        st.plotly_chart(revenue_fig, use_container_width=True)
-        st.plotly_chart(fcf_fig, use_container_width=True)
-
-        # -----------------------------
-        # Scenario analysis
-        # -----------------------------
-        st.markdown('<div class="section-label">Scenario Analysis</div>', unsafe_allow_html=True)
-
-        st.markdown("**Bear Case**")
-        bear_growth = st.number_input("Bear Growth (%)", value=max((growth_rate * 100) - 2, 0.0), key="bear_growth") / 100
-        bear_wacc = st.number_input("Bear WACC (%)", value=(wacc * 100) + 1, key="bear_wacc") / 100
-        bear_tg = st.number_input("Bear Terminal Growth (%)", value=max((terminal_growth * 100) - 0.5, 0.0), key="bear_tg") / 100
-
-        st.markdown("**Base Case**")
-        base_growth_scn = st.number_input("Base Growth (%)", value=growth_rate * 100, key="base_growth") / 100
-        base_wacc_scn = st.number_input("Base WACC (%)", value=wacc * 100, key="base_wacc") / 100
-        base_tg_scn = st.number_input("Base Terminal Growth (%)", value=terminal_growth * 100, key="base_tg") / 100
-
-        st.markdown("**Bull Case**")
-        bull_growth = st.number_input("Bull Growth (%)", value=(growth_rate * 100) + 2, key="bull_growth") / 100
-        bull_wacc = st.number_input("Bull WACC (%)", value=max((wacc * 100) - 1, 0.0), key="bull_wacc") / 100
-        bull_tg = st.number_input("Bull Terminal Growth (%)", value=(terminal_growth * 100) + 0.5, key="bull_tg") / 100
-
+        # scenario analysis
         scenario_inputs = {
-            "Bear": {"growth": bear_growth, "wacc": bear_wacc, "tg": bear_tg},
-            "Base": {"growth": base_growth_scn, "wacc": base_wacc_scn, "tg": base_tg_scn},
-            "Bull": {"growth": bull_growth, "wacc": bull_wacc, "tg": bull_tg},
+            "Bear": {"growth": max(growth_rate - 0.02, 0), "wacc": wacc + 0.01, "tg": max(terminal_growth - 0.005, 0)},
+            "Base": {"growth": growth_rate, "wacc": wacc, "tg": terminal_growth},
+            "Bull": {"growth": growth_rate + 0.02, "wacc": max(wacc - 0.01, 0.01), "tg": terminal_growth + 0.005},
         }
 
         scenario_rows = []
@@ -782,72 +681,284 @@ if run_button:
                     wacc=vals["wacc"],
                     terminal_growth=vals["tg"],
                     net_debt=net_debt,
-                    projection_years=projection_years
+                    projection_years=projection_years,
                 )
-                scenario_rows.append({
-                    "Scenario": scenario_name,
-                    "Growth Rate": f"{vals['growth']*100:.2f}%",
-                    "WACC": f"{vals['wacc']*100:.2f}%",
-                    "Terminal Growth": f"{vals['tg']*100:.2f}%",
-                    "Implied Price": format_dollar_short(scenario_result["implied_price"])
-                })
+                scenario_rows.append(
+                    {
+                        "Scenario": scenario_name,
+                        "Growth Rate": f"{vals['growth']*100:.2f}%",
+                        "WACC": f"{vals['wacc']*100:.2f}%",
+                        "Terminal Growth": f"{vals['tg']*100:.2f}%",
+                        "Implied Price": format_dollar_short(scenario_result["implied_price"]),
+                    }
+                )
             except Exception:
-                scenario_rows.append({
-                    "Scenario": scenario_name,
-                    "Growth Rate": f"{vals['growth']*100:.2f}%",
-                    "WACC": f"{vals['wacc']*100:.2f}%",
-                    "Terminal Growth": f"{vals['tg']*100:.2f}%",
-                    "Implied Price": "Invalid"
-                })
+                scenario_rows.append(
+                    {
+                        "Scenario": scenario_name,
+                        "Growth Rate": f"{vals['growth']*100:.2f}%",
+                        "WACC": f"{vals['wacc']*100:.2f}%",
+                        "Terminal Growth": f"{vals['tg']*100:.2f}%",
+                        "Implied Price": "Invalid",
+                    }
+                )
 
-        scenario_df_display = pd.DataFrame(scenario_rows)
-        st.markdown(html_table(scenario_df_display), unsafe_allow_html=True)
+        scenario_df = pd.DataFrame(scenario_rows)
+
+        # sensitivity
+        wacc_values = [0.07, 0.08, 0.09, 0.10]
+        tg_values = [0.02, 0.025, 0.03]
+
+        sensitivity_rows = []
+        heatmap_values = []
+
+        for tg in tg_values:
+            row = {"Terminal Growth": f"{tg*100:.2f}%"}
+            heatmap_row = []
+            for w in wacc_values:
+                try:
+                    sens_result = run_dcf(
+                        base_revenue=revenue,
+                        ebit_margin=ebit_margin,
+                        da_percent=da_percent,
+                        capex_percent=capex_percent,
+                        shares_outstanding=shares_outstanding,
+                        growth_rate=growth_rate,
+                        tax_rate=tax_rate,
+                        wacc=w,
+                        terminal_growth=tg,
+                        net_debt=net_debt,
+                        projection_years=projection_years,
+                    )
+                    row[f"WACC {w*100:.2f}%"] = format_dollar_short(sens_result["implied_price"])
+                    heatmap_row.append(sens_result["implied_price"])
+                except Exception:
+                    row[f"WACC {w*100:.2f}%"] = "Invalid"
+                    heatmap_row.append(None)
+            sensitivity_rows.append(row)
+            heatmap_values.append(heatmap_row)
+
+        sensitivity_df = pd.DataFrame(sensitivity_rows)
+
+        # export dfs
+        summary_df = pd.DataFrame(
+            [
+                {
+                    "Company": company_name,
+                    "Ticker": resolved_symbol,
+                    "Current Price": current_price,
+                    "Implied Price": implied_price,
+                    "Upside/Downside %": upside_downside,
+                    "Recommendation": recommendation,
+                    "Enterprise Value": enterprise_value,
+                    "Market Cap": market_cap,
+                    "Sector": sector,
+                    "Industry": industry,
+                    "Revenue Growth %": growth_rate * 100,
+                    "WACC %": wacc * 100,
+                    "Terminal Growth %": terminal_growth * 100,
+                }
+            ]
+        )
+
+        projection_export_df = pd.DataFrame(
+            {
+                "Year": list(range(1, projection_years + 1)),
+                "Projected Revenue": base_results["projected_revenues"],
+                "Projected FCF": base_results["projected_fcfs"],
+                "Discounted FCF": base_results["discounted_fcfs"],
+            }
+        )
+
+        excel_bytes = build_excel_file(
+            summary_df=summary_df,
+            projection_df=projection_export_df,
+            scenario_df=scenario_df,
+            sensitivity_df=sensitivity_df,
+            peers_df=peer_df,
+        )
 
         # -----------------------------
-        # Sensitivity heatmap + table
+        # PAGES
         # -----------------------------
-        st.markdown('<div class="section-label">Sensitivity Analysis</div>', unsafe_allow_html=True)
+        st.caption(f"Matched Input: {company_name} ({resolved_symbol})")
+        st.caption(f"Suggested Peers: {', '.join(suggested_peers)}")
 
-        wacc_input = st.text_input("WACC values (%)", "7,8,9,10")
-        tg_input = st.text_input("Terminal Growth values (%)", "2,2.5,3")
+        if page == "Overview":
+            st.markdown('<div class="section-label">Overview</div>', unsafe_allow_html=True)
 
-        sensitivity_df_export = pd.DataFrame()
-        try:
-            wacc_values = [float(x.strip()) / 100 for x in wacc_input.split(",")]
-            tg_values = [float(x.strip()) / 100 for x in tg_input.split(",")]
+            c1, c2, c3, c4 = st.columns(4)
+            with c1:
+                st.markdown(
+                    f"""<div class="metric-card"><div class="metric-label">Current Price</div><div class="metric-value">{format_dollar_short(current_price)}</div></div>""",
+                    unsafe_allow_html=True,
+                )
+            with c2:
+                st.markdown(
+                    f"""<div class="metric-card"><div class="metric-label">Implied Price</div><div class="metric-value">{format_dollar_short(implied_price)}</div></div>""",
+                    unsafe_allow_html=True,
+                )
+            with c3:
+                st.markdown(
+                    f"""<div class="metric-card"><div class="metric-label">Upside / Downside</div><div class="metric-value">{format_percent(upside_downside)}</div></div>""",
+                    unsafe_allow_html=True,
+                )
+            with c4:
+                st.markdown(
+                    f"""<div class="metric-card"><div class="metric-label">Recommendation</div><div class="metric-value" style="color:{rec_color};">{recommendation}</div></div>""",
+                    unsafe_allow_html=True,
+                )
 
-            heatmap_values = []
-            sensitivity_rows_display = []
+            st.markdown(
+                f"""
+                <div class="summary-box" style="border-left: 5px solid {rec_color};">
+                    <div class="summary-title">Valuation Summary</div>
+                    <div style="line-height:1.7; font-size:1.02rem;">
+                        Company: <b>{company_name}</b><br>
+                        Ticker: <b>{resolved_symbol}</b><br>
+                        Market Cap: <b>{format_dollar_short(market_cap)}</b><br>
+                        Sector / Industry: <b>{sector or 'N/A'}</b> / <b>{industry or 'N/A'}</b>
+                    </div>
+                    <div style="margin-top:12px; color:#AAB0B6; font-size:14px;">
+                        Assumptions: Revenue Growth {growth_rate*100:.1f}% | WACC {wacc*100:.1f}% | Terminal Growth {terminal_growth*100:.1f}%
+                    </div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
 
-            for tg in tg_values:
-                heatmap_row = []
-                display_row = {"Terminal Growth": f"{tg*100:.2f}%"}
-                for w in wacc_values:
-                    try:
-                        sens_result = run_dcf(
-                            base_revenue=revenue,
-                            ebit_margin=ebit_margin,
-                            da_percent=da_percent,
-                            capex_percent=capex_percent,
-                            shares_outstanding=shares_outstanding,
-                            growth_rate=growth_rate,
-                            tax_rate=tax_rate,
-                            wacc=w,
-                            terminal_growth=tg,
-                            net_debt=net_debt,
-                            projection_years=projection_years
-                        )
-                        implied_val = sens_result["implied_price"]
-                        heatmap_row.append(implied_val)
-                        display_row[f"WACC {w*100:.2f}%"] = format_dollar_short(implied_val)
-                    except Exception:
-                        heatmap_row.append(None)
-                        display_row[f"WACC {w*100:.2f}%"] = "Invalid"
-                heatmap_values.append(heatmap_row)
-                sensitivity_rows_display.append(display_row)
+            if not hist_1y.empty:
+                st.plotly_chart(plot_price_chart(hist_1y, company_name), use_container_width=True)
 
-            sensitivity_df_display = pd.DataFrame(sensitivity_rows_display)
-            sensitivity_df_export = sensitivity_df_display.copy()
+        elif page == "Market Data":
+            st.markdown('<div class="section-label">Market Data</div>', unsafe_allow_html=True)
+
+            m1, m2, m3, m4 = st.columns(4)
+            with m1:
+                st.markdown(
+                    f"""<div class="metric-card"><div class="metric-label">Market Cap</div><div class="metric-value">{format_dollar_short(market_cap)}</div></div>""",
+                    unsafe_allow_html=True,
+                )
+            with m2:
+                st.markdown(
+                    f"""<div class="metric-card"><div class="metric-label">Trailing P/E</div><div class="metric-value">{trailing_pe if trailing_pe else 'N/A'}</div></div>""",
+                    unsafe_allow_html=True,
+                )
+            with m3:
+                st.markdown(
+                    f"""<div class="metric-card"><div class="metric-label">Forward P/E</div><div class="metric-value">{forward_pe if forward_pe else 'N/A'}</div></div>""",
+                    unsafe_allow_html=True,
+                )
+            with m4:
+                st.markdown(
+                    f"""<div class="metric-card"><div class="metric-label">Current Price</div><div class="metric-value">{format_dollar_short(current_price)}</div></div>""",
+                    unsafe_allow_html=True,
+                )
+
+            if not hist_1y.empty:
+                st.plotly_chart(plot_price_chart(hist_1y, company_name), use_container_width=True)
+
+            st.markdown('<div class="section-label">Peer Comparison</div>', unsafe_allow_html=True)
+            st.markdown(html_table(peer_df), unsafe_allow_html=True)
+
+        elif page == "DCF Valuation":
+            st.markdown('<div class="section-label">DCF Valuation</div>', unsafe_allow_html=True)
+
+            d1, d2, d3 = st.columns(3)
+            with d1:
+                st.markdown(
+                    f"""<div class="metric-card"><div class="metric-label">Enterprise Value</div><div class="metric-value">{format_dollar_short(enterprise_value)}</div></div>""",
+                    unsafe_allow_html=True,
+                )
+            with d2:
+                st.markdown(
+                    f"""<div class="metric-card"><div class="metric-label">Implied Price</div><div class="metric-value">{format_dollar_short(implied_price)}</div></div>""",
+                    unsafe_allow_html=True,
+                )
+            with d3:
+                st.markdown(
+                    f"""<div class="metric-card"><div class="metric-label">Recommendation</div><div class="metric-value" style="color:{rec_color};">{recommendation}</div></div>""",
+                    unsafe_allow_html=True,
+                )
+
+            projection_df_display = pd.DataFrame(
+                {
+                    "Year": list(range(1, projection_years + 1)),
+                    "Projected Revenue ($M)": [f"${x / 1_000_000:,.1f}" for x in base_results["projected_revenues"]],
+                    "Projected FCF ($M)": [f"${x / 1_000_000:,.1f}" for x in base_results["projected_fcfs"]],
+                    "Discounted FCF ($M)": [f"${x / 1_000_000:,.1f}" for x in base_results["discounted_fcfs"]],
+                }
+            )
+            st.markdown(html_table(projection_df_display), unsafe_allow_html=True)
+
+            years = list(range(1, projection_years + 1))
+            revenue_values = [x / 1_000_000 for x in base_results["projected_revenues"]]
+            fcf_values = [x / 1_000_000 for x in base_results["projected_fcfs"]]
+
+            revenue_fig = go.Figure()
+            revenue_fig.add_trace(
+                go.Scatter(
+                    x=years,
+                    y=revenue_values,
+                    mode="lines+markers",
+                    line=dict(color="#38BDF8", width=4),
+                    marker=dict(size=8, color="#38BDF8"),
+                    name="Revenue",
+                )
+            )
+            revenue_fig.update_layout(
+                title="Revenue Forecast",
+                template="plotly_dark",
+                paper_bgcolor="rgba(0,0,0,0)",
+                plot_bgcolor="#111827",
+                font=dict(color="#F9FAFB"),
+                margin=dict(l=20, r=20, t=50, b=20),
+                xaxis=dict(title="Year", gridcolor="#243041"),
+                yaxis=dict(title="Revenue ($M)", gridcolor="#243041"),
+            )
+
+            fcf_fig = go.Figure()
+            fcf_fig.add_trace(
+                go.Bar(
+                    x=years,
+                    y=fcf_values,
+                    marker=dict(color="#8B5CF6"),
+                    name="FCF",
+                )
+            )
+            fcf_fig.update_layout(
+                title="Free Cash Flow Forecast",
+                template="plotly_dark",
+                paper_bgcolor="rgba(0,0,0,0)",
+                plot_bgcolor="#111827",
+                font=dict(color="#F9FAFB"),
+                margin=dict(l=20, r=20, t=50, b=20),
+                xaxis=dict(title="Year", gridcolor="#243041"),
+                yaxis=dict(title="FCF ($M)", gridcolor="#243041"),
+            )
+
+            st.plotly_chart(revenue_fig, use_container_width=True)
+            st.plotly_chart(fcf_fig, use_container_width=True)
+
+        elif page == "Comps Valuation":
+            st.markdown('<div class="section-label">Comps Valuation</div>', unsafe_allow_html=True)
+
+            c1, c2 = st.columns(2)
+            with c1:
+                st.markdown(
+                    f"""<div class="metric-card"><div class="metric-label">Trailing P/E Implied Price</div><div class="metric-value">{format_dollar_short(trailing_comps_value)}</div></div>""",
+                    unsafe_allow_html=True,
+                )
+            with c2:
+                st.markdown(
+                    f"""<div class="metric-card"><div class="metric-label">Forward P/E Implied Price</div><div class="metric-value">{format_dollar_short(forward_comps_value)}</div></div>""",
+                    unsafe_allow_html=True,
+                )
+
+            st.markdown(html_table(peer_df), unsafe_allow_html=True)
+
+        elif page == "Sensitivity":
+            st.markdown('<div class="section-label">Sensitivity</div>', unsafe_allow_html=True)
 
             heatmap_fig = go.Figure(
                 data=go.Heatmap(
@@ -869,110 +980,40 @@ if run_button:
                 xaxis_title="WACC",
                 yaxis_title="Terminal Growth",
             )
-
             st.plotly_chart(heatmap_fig, use_container_width=True)
-            st.markdown(html_table(sensitivity_df_display), unsafe_allow_html=True)
 
-        except Exception:
-            st.warning("Please enter valid comma-separated numeric values.")
+            st.markdown('<div class="section-label">Scenario Analysis</div>', unsafe_allow_html=True)
+            st.markdown(html_table(scenario_df), unsafe_allow_html=True)
 
-        # -----------------------------
-        # Peer comparison + comps valuation
-        # -----------------------------
-        st.markdown('<div class="section-label">Peer Comparison</div>', unsafe_allow_html=True)
+            st.markdown('<div class="section-label">Sensitivity Table</div>', unsafe_allow_html=True)
+            st.markdown(html_table(sensitivity_df), unsafe_allow_html=True)
 
-        peers_tuple = tuple(peer_list)
-        peer_df = get_peer_metrics(peers_tuple)
-        st.markdown(html_table(peer_df), unsafe_allow_html=True)
+        elif page == "Export":
+            st.markdown('<div class="section-label">Export</div>', unsafe_allow_html=True)
 
-        # comps valuation
-        peer_raw_rows = []
-        for peer in peer_list:
-            try:
-                pdata = get_market_and_financial_data(peer)
-                peer_raw_rows.append({
-                    "Ticker": peer,
-                    "Trailing P/E": pdata["trailing_pe"],
-                    "Forward P/E": pdata["forward_pe"]
-                })
-            except Exception:
-                continue
-
-        peer_raw_df = pd.DataFrame(peer_raw_rows)
-        avg_trailing_pe = pd.to_numeric(peer_raw_df.get("Trailing P/E"), errors="coerce").dropna().mean() if not peer_raw_df.empty else None
-        avg_forward_pe = pd.to_numeric(peer_raw_df.get("Forward P/E"), errors="coerce").dropna().mean() if not peer_raw_df.empty else None
-
-        trailing_comps_value = avg_trailing_pe * trailing_eps if avg_trailing_pe and trailing_eps else None
-        forward_comps_value = avg_forward_pe * forward_eps if avg_forward_pe and forward_eps else None
-
-        if trailing_comps_value is not None or forward_comps_value is not None:
-            st.markdown('<div class="section-label">Comps Valuation</div>', unsafe_allow_html=True)
-
-            comp1, comp2 = st.columns(2)
-            with comp1:
-                st.markdown(
-                    f"""
-                    <div class="metric-card">
-                        <div class="metric-label">Trailing P/E Implied Price</div>
-                        <div class="metric-value">{format_dollar_short(trailing_comps_value)}</div>
+            st.markdown(
+                """
+                <div class="summary-box">
+                    <div class="summary-title">Download Model</div>
+                    <div style="line-height:1.7;">
+                        Export the current valuation setup into Excel, including:
+                        <br>• Summary
+                        <br>• DCF Projections
+                        <br>• Scenario Analysis
+                        <br>• Sensitivity Analysis
+                        <br>• Peer Comparison
                     </div>
-                    """,
-                    unsafe_allow_html=True
-                )
-            with comp2:
-                st.markdown(
-                    f"""
-                    <div class="metric-card">
-                        <div class="metric-label">Forward P/E Implied Price</div>
-                        <div class="metric-value">{format_dollar_short(forward_comps_value)}</div>
-                    </div>
-                    """,
-                    unsafe_allow_html=True
-                )
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
 
-        # -----------------------------
-        # Export
-        # -----------------------------
-        st.markdown('<div class="section-label">Download Model</div>', unsafe_allow_html=True)
-
-        summary_df = pd.DataFrame([{
-            "Company": company_name,
-            "Ticker": resolved_symbol,
-            "Current Price": current_price,
-            "Implied Price": implied_price,
-            "Upside/Downside %": upside_downside,
-            "Recommendation": recommendation,
-            "Enterprise Value": enterprise_value,
-            "Market Cap": market_cap,
-            "Revenue Growth %": growth_rate * 100,
-            "WACC %": wacc * 100,
-            "Terminal Growth %": terminal_growth * 100,
-        }])
-
-        projection_df_export = pd.DataFrame({
-            "Year": list(range(1, projection_years + 1)),
-            "Projected Revenue": base_results["projected_revenues"],
-            "Projected FCF": base_results["projected_fcfs"],
-            "Discounted FCF": base_results["discounted_fcfs"],
-        })
-
-        scenario_df_export = pd.DataFrame(scenario_rows)
-        peers_df_export = peer_df.copy()
-
-        excel_bytes = build_excel_file(
-            summary_df=summary_df,
-            projection_df=projection_df_export,
-            scenario_df=scenario_df_export,
-            sensitivity_df=sensitivity_df_export,
-            peers_df=peers_df_export
-        )
-
-        st.download_button(
-            label="Download Excel Model",
-            data=excel_bytes,
-            file_name=f"{resolved_symbol.lower()}_valuation_model.xlsx",
-            mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-        )
+            st.download_button(
+                label="Download Excel Model",
+                data=excel_bytes,
+                file_name=f"{resolved_symbol.lower()}_valuation_model.xlsx",
+                mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            )
 
     except Exception as e:
         st.error(f"Something went wrong: {e}")
