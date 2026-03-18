@@ -176,7 +176,18 @@ st.markdown(
     }
 
     section[data-testid="stSidebar"] {
-        background: rgba(10, 14, 25, 0.95);
+        background: rgba(10, 14, 25, 0.96);
+    }
+
+    section[data-testid="stSidebar"] label,
+    section[data-testid="stSidebar"] .stMarkdown,
+    section[data-testid="stSidebar"] p,
+    section[data-testid="stSidebar"] div {
+        color: #D7E3FF !important;
+    }
+
+    section[data-testid="stSidebar"] .small-note {
+        color: #94A3B8 !important;
     }
 
     .sidebar-brand {
@@ -264,6 +275,25 @@ def is_probable_ticker(query: str) -> bool:
     return bool(re.fullmatch(r"[A-Z.\-]{1,6}", q))
 
 
+def normalize_symbol(text: str) -> str:
+    raw = text.strip().upper()
+    alias_map = {
+        "GOOGLE": "GOOGL",
+        "ALPHABET": "GOOGL",
+        "FACEBOOK": "META",
+        "FB": "META",
+        "APPLE": "AAPL",
+        "MICROSOFT": "MSFT",
+        "NVIDIA": "NVDA",
+        "AMAZON": "AMZN",
+        "TESLA": "TSLA",
+        "NETFLIX": "NFLX",
+        "JP MORGAN": "JPM",
+        "JPMORGAN": "JPM",
+    }
+    return alias_map.get(raw, raw)
+
+
 PEER_MAP = {
     "AAPL": ["MSFT", "GOOGL", "NVDA", "AMZN"],
     "MSFT": ["AAPL", "GOOGL", "ORCL", "NVDA"],
@@ -294,10 +324,12 @@ def resolve_company_input(query: str) -> dict:
     if not clean_query:
         raise ValueError("Please enter a company name or ticker.")
 
-    if is_probable_ticker(clean_query):
+    normalized = normalize_symbol(clean_query)
+
+    if is_probable_ticker(normalized):
         return {
-            "symbol": clean_query.upper(),
-            "matched_name": clean_query.upper(),
+            "symbol": normalized,
+            "matched_name": normalized,
             "source": "ticker",
         }
 
@@ -306,7 +338,7 @@ def resolve_company_input(query: str) -> dict:
         quotes = getattr(search, "quotes", []) or []
         if quotes:
             best = quotes[0]
-            symbol = best.get("symbol", clean_query.upper())
+            symbol = normalize_symbol(best.get("symbol", clean_query.upper()))
             matched_name = (
                 best.get("shortname")
                 or best.get("longname")
@@ -322,7 +354,7 @@ def resolve_company_input(query: str) -> dict:
         pass
 
     return {
-        "symbol": clean_query.upper(),
+        "symbol": normalized,
         "matched_name": clean_query,
         "source": "fallback",
     }
@@ -330,6 +362,7 @@ def resolve_company_input(query: str) -> dict:
 
 @st.cache_data(ttl=1800)
 def get_market_and_financial_data(symbol: str) -> dict:
+    symbol = normalize_symbol(symbol)
     ticker = yf.Ticker(symbol)
 
     financials = ticker.financials
@@ -338,12 +371,22 @@ def get_market_and_financial_data(symbol: str) -> dict:
     hist_5d = ticker.history(period="5d")
 
     current_price = None
-    if not hist_5d.empty:
+    market_cap = None
+    shares_outstanding = None
+
+    try:
+        fast_info = ticker.fast_info
+        if hasattr(fast_info, "get"):
+            current_price = fast_info.get("lastPrice") or current_price
+            market_cap = fast_info.get("marketCap") or market_cap
+            shares_outstanding = fast_info.get("shares") or shares_outstanding
+    except Exception:
+        pass
+
+    if current_price is None and not hist_5d.empty:
         current_price = float(hist_5d["Close"].iloc[-1])
 
-    shares_outstanding = None
     company_name = symbol
-    market_cap = None
     trailing_pe = None
     forward_pe = None
     trailing_eps = None
@@ -352,16 +395,13 @@ def get_market_and_financial_data(symbol: str) -> dict:
     industry = None
 
     try:
-        fast_info = ticker.fast_info
-        if hasattr(fast_info, "get"):
-            shares_outstanding = fast_info.get("shares")
-            market_cap = fast_info.get("market_cap")
-    except Exception:
-        pass
-
-    try:
         info = ticker.info
-        company_name = info.get("longName", symbol)
+        company_name = (
+            info.get("longName")
+            or info.get("shortName")
+            or info.get("displayName")
+            or symbol
+        )
         if current_price is None:
             current_price = info.get("currentPrice", 0)
         if shares_outstanding is None:
@@ -378,6 +418,7 @@ def get_market_and_financial_data(symbol: str) -> dict:
         pass
 
     return {
+        "symbol": symbol,
         "company_name": company_name,
         "current_price": current_price,
         "shares_outstanding": shares_outstanding,
@@ -395,6 +436,7 @@ def get_market_and_financial_data(symbol: str) -> dict:
 
 
 def suggest_peers(symbol: str, sector: Optional[str]) -> List[str]:
+    symbol = normalize_symbol(symbol)
     if symbol in PEER_MAP:
         return [x for x in PEER_MAP[symbol] if x != symbol]
     if sector in SECTOR_PEERS:
@@ -406,11 +448,12 @@ def suggest_peers(symbol: str, sector: Optional[str]) -> List[str]:
 def get_peer_metrics(tickers: Tuple[str, ...]) -> pd.DataFrame:
     rows = []
     for t in tickers:
+        t_norm = normalize_symbol(t)
         try:
-            data = get_market_and_financial_data(t)
+            data = get_market_and_financial_data(t_norm)
             rows.append(
                 {
-                    "Ticker": t,
+                    "Ticker": data["symbol"],
                     "Company": data["company_name"],
                     "Market Cap": format_dollar_short(data["market_cap"]),
                     "Trailing P/E": round(data["trailing_pe"], 2) if data["trailing_pe"] else "N/A",
@@ -421,7 +464,7 @@ def get_peer_metrics(tickers: Tuple[str, ...]) -> pd.DataFrame:
         except Exception:
             rows.append(
                 {
-                    "Ticker": t,
+                    "Ticker": t_norm,
                     "Company": "Unavailable",
                     "Market Cap": "N/A",
                     "Trailing P/E": "N/A",
@@ -437,6 +480,7 @@ def run_dcf(
     ebit_margin,
     da_percent,
     capex_percent,
+    nwc_percent,
     shares_outstanding,
     growth_rate,
     tax_rate,
@@ -459,7 +503,7 @@ def run_dcf(
         nopat = ebit * (1 - tax_rate)
         da = revenue_proj * da_percent
         capex_proj = revenue_proj * capex_percent
-        nwc = 0
+        nwc = revenue_proj * nwc_percent
 
         fcf = nopat + da - capex_proj - nwc
         projected_fcfs.append(fcf)
@@ -560,13 +604,22 @@ with st.sidebar:
 
     st.markdown("---")
 
-    company_input = st.text_input("Company Name or Ticker", "Apple")
+    company_input = st.text_input("Company Name or Ticker", "ULTA")
     growth_rate = st.number_input("Revenue Growth Rate (%)", value=5.0, step=0.5) / 100
     tax_rate = st.number_input("Tax Rate (%)", value=21.0, step=0.5) / 100
     wacc = st.number_input("WACC (%)", value=9.0, step=0.5) / 100
     terminal_growth = st.number_input("Terminal Growth Rate (%)", value=2.5, step=0.5) / 100
     projection_years = int(st.number_input("Projection Years", min_value=3, max_value=10, value=5, step=1))
     net_debt = st.number_input("Net Debt ($)", value=0.0, step=1000000.0)
+
+    st.markdown("### DCF Assumptions")
+    use_latest_company_assumptions = st.checkbox("Use latest company margins automatically", value=True)
+
+    manual_ebit_margin = st.number_input("Manual EBIT Margin (%)", value=18.0, step=0.5) / 100
+    manual_da_percent = st.number_input("Manual D&A (% of Revenue)", value=3.0, step=0.5) / 100
+    manual_capex_percent = st.number_input("Manual CapEx (% of Revenue)", value=4.0, step=0.5) / 100
+    manual_nwc_percent = st.number_input("Manual Change in NWC (% of Revenue)", value=1.0, step=0.5) / 100
+
     manual_peers = st.text_input("Override Peer Tickers", "")
 
     st.markdown("---")
@@ -611,15 +664,22 @@ else:
         depreciation = cashflow.loc["Depreciation And Amortization"].iloc[0]
         capex = abs(cashflow.loc["Capital Expenditure"].iloc[0])
 
-        ebit_margin = operating_income / revenue
-        da_percent = depreciation / revenue
-        capex_percent = capex / revenue
+        auto_ebit_margin = operating_income / revenue
+        auto_da_percent = depreciation / revenue
+        auto_capex_percent = capex / revenue
+        auto_nwc_percent = 0.0
+
+        ebit_margin_used = auto_ebit_margin if use_latest_company_assumptions else manual_ebit_margin
+        da_percent_used = auto_da_percent if use_latest_company_assumptions else manual_da_percent
+        capex_percent_used = auto_capex_percent if use_latest_company_assumptions else manual_capex_percent
+        nwc_percent_used = auto_nwc_percent if use_latest_company_assumptions else manual_nwc_percent
 
         base_results = run_dcf(
             base_revenue=revenue,
-            ebit_margin=ebit_margin,
-            da_percent=da_percent,
-            capex_percent=capex_percent,
+            ebit_margin=ebit_margin_used,
+            da_percent=da_percent_used,
+            capex_percent=capex_percent_used,
+            nwc_percent=nwc_percent_used,
             shares_outstanding=shares_outstanding,
             growth_rate=growth_rate,
             tax_rate=tax_rate,
@@ -635,17 +695,16 @@ else:
         recommendation, rec_color = get_recommendation(upside_downside)
 
         suggested_peers = suggest_peers(resolved_symbol, sector)
-        peer_list = [x.strip().upper() for x in manual_peers.split(",") if x.strip()] if manual_peers.strip() else suggested_peers
+        peer_list = [normalize_symbol(x) for x in manual_peers.split(",") if x.strip()] if manual_peers.strip() else suggested_peers
         peer_df = get_peer_metrics(tuple(peer_list))
 
-        # comps valuation
         peer_raw_rows = []
         for peer in peer_list:
             try:
                 pdata = get_market_and_financial_data(peer)
                 peer_raw_rows.append(
                     {
-                        "Ticker": peer,
+                        "Ticker": pdata["symbol"],
                         "Trailing P/E": pdata["trailing_pe"],
                         "Forward P/E": pdata["forward_pe"],
                     }
@@ -660,7 +719,6 @@ else:
         trailing_comps_value = avg_trailing_pe * trailing_eps if avg_trailing_pe and trailing_eps else None
         forward_comps_value = avg_forward_pe * forward_eps if avg_forward_pe and forward_eps else None
 
-        # scenario analysis
         scenario_inputs = {
             "Bear": {"growth": max(growth_rate - 0.02, 0), "wacc": wacc + 0.01, "tg": max(terminal_growth - 0.005, 0)},
             "Base": {"growth": growth_rate, "wacc": wacc, "tg": terminal_growth},
@@ -672,9 +730,10 @@ else:
             try:
                 scenario_result = run_dcf(
                     base_revenue=revenue,
-                    ebit_margin=ebit_margin,
-                    da_percent=da_percent,
-                    capex_percent=capex_percent,
+                    ebit_margin=ebit_margin_used,
+                    da_percent=da_percent_used,
+                    capex_percent=capex_percent_used,
+                    nwc_percent=nwc_percent_used,
                     shares_outstanding=shares_outstanding,
                     growth_rate=vals["growth"],
                     tax_rate=tax_rate,
@@ -705,7 +764,6 @@ else:
 
         scenario_df = pd.DataFrame(scenario_rows)
 
-        # sensitivity
         wacc_values = [0.07, 0.08, 0.09, 0.10]
         tg_values = [0.02, 0.025, 0.03]
 
@@ -719,9 +777,10 @@ else:
                 try:
                     sens_result = run_dcf(
                         base_revenue=revenue,
-                        ebit_margin=ebit_margin,
-                        da_percent=da_percent,
-                        capex_percent=capex_percent,
+                        ebit_margin=ebit_margin_used,
+                        da_percent=da_percent_used,
+                        capex_percent=capex_percent_used,
+                        nwc_percent=nwc_percent_used,
                         shares_outstanding=shares_outstanding,
                         growth_rate=growth_rate,
                         tax_rate=tax_rate,
@@ -740,7 +799,6 @@ else:
 
         sensitivity_df = pd.DataFrame(sensitivity_rows)
 
-        # export dfs
         summary_df = pd.DataFrame(
             [
                 {
@@ -757,6 +815,10 @@ else:
                     "Revenue Growth %": growth_rate * 100,
                     "WACC %": wacc * 100,
                     "Terminal Growth %": terminal_growth * 100,
+                    "EBIT Margin %": ebit_margin_used * 100,
+                    "D&A %": da_percent_used * 100,
+                    "CapEx %": capex_percent_used * 100,
+                    "NWC %": nwc_percent_used * 100,
                 }
             ]
         )
@@ -778,9 +840,6 @@ else:
             peers_df=peer_df,
         )
 
-        # -----------------------------
-        # PAGES
-        # -----------------------------
         st.caption(f"Matched Input: {company_name} ({resolved_symbol})")
         st.caption(f"Suggested Peers: {', '.join(suggested_peers)}")
 
@@ -820,7 +879,7 @@ else:
                         Sector / Industry: <b>{sector or 'N/A'}</b> / <b>{industry or 'N/A'}</b>
                     </div>
                     <div style="margin-top:12px; color:#AAB0B6; font-size:14px;">
-                        Assumptions: Revenue Growth {growth_rate*100:.1f}% | WACC {wacc*100:.1f}% | Terminal Growth {terminal_growth*100:.1f}%
+                        Assumptions Used: EBIT Margin {ebit_margin_used*100:.1f}% | D&A {da_percent_used*100:.1f}% | CapEx {capex_percent_used*100:.1f}% | NWC {nwc_percent_used*100:.1f}%
                     </div>
                 </div>
                 """,
@@ -880,6 +939,19 @@ else:
                     f"""<div class="metric-card"><div class="metric-label">Recommendation</div><div class="metric-value" style="color:{rec_color};">{recommendation}</div></div>""",
                     unsafe_allow_html=True,
                 )
+
+            assumptions_df = pd.DataFrame(
+                {
+                    "Assumption": ["EBIT Margin", "D&A %", "CapEx %", "NWC %"],
+                    "Value": [
+                        f"{ebit_margin_used*100:.1f}%",
+                        f"{da_percent_used*100:.1f}%",
+                        f"{capex_percent_used*100:.1f}%",
+                        f"{nwc_percent_used*100:.1f}%",
+                    ],
+                }
+            )
+            st.markdown(html_table(assumptions_df), unsafe_allow_html=True)
 
             projection_df_display = pd.DataFrame(
                 {
