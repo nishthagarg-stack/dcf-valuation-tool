@@ -889,7 +889,7 @@ def plot_peer_pe_chart(peer_df: pd.DataFrame):
     fig.update_layout(
         title=dict(
             text="Peer Trailing P/E Comparison",
-            font=dict(size=20, color="FACC15")
+            font=dict(size=20, color="#FACC15")
         ),
         template="plotly_dark",
         paper_bgcolor="rgba(0,0,0,0)",
