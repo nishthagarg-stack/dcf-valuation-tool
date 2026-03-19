@@ -16,6 +16,19 @@ st.set_page_config(
     page_icon="📈",
     layout="wide",
 )
+st.markdown("""
+<style>
+div[data-testid="stCheckbox"]*{
+    color: #60A5FA !important;
+    font-weight: 700 !important:
+    font-size: 15px !important;
+    opacity: 1 !important;
+    }
+    input[type="checkbox"] {
+    accent-color: #3B82F6 !important;
+    }
+    </style>
+    """, unsafe_allow_html=True)
 
 # -----------------------------
 # State init
