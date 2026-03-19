@@ -26,6 +26,8 @@ DEFAULT_STATE = {
     "revenue_growth_pct": 5.0,
     "operating_auto": True,
     "ebit_margin_pct": 18.0,
+    "tax_auto": True,
+    "tax_rate_pct": 21.0,
     "da_auto": True,
     "da_pct": 3.0,
     "capex_auto": True,
@@ -33,7 +35,6 @@ DEFAULT_STATE = {
     "nwc_auto": True,
     "nwc_pct": 1.0,
     "valuation_auto": True,
-    "tax_rate_pct": 21.0,
     "wacc_pct": 9.0,
     "terminal_growth_pct": 2.5,
     "net_debt_auto": True,
@@ -41,6 +42,7 @@ DEFAULT_STATE = {
     "projection_years": 5,
     "shares_auto": True,
     "shares_outstanding": 1_000_000_000.0,
+    "use_auto_peers": True,
     "manual_peers": "",
 }
 for k, v in DEFAULT_STATE.items():
@@ -53,7 +55,7 @@ for k, v in DEFAULT_STATE.items():
 # -----------------------------
 st.markdown(
     """
-    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;800&family=Playfair+Display:ital,wght@1,700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;700;800&family=Playfair+Display:ital,wght@1,700&display=swap" rel="stylesheet">
 
     <style>
     html, body, [class*="css"] {
@@ -99,17 +101,25 @@ st.markdown(
 
     .subtitle-text {
         font-size: 16px;
-        color: #9CA3AF;
+        color: #BFC7D5;
         font-weight: 500;
         letter-spacing: 0.5px;
     }
 
     .section-label {
-        font-size: 1.55rem;
-        font-weight: 800;
+        font-size: 1.75rem;
+        font-weight: 900;
         margin-top: 1rem;
-        margin-bottom: 0.8rem;
+        margin-bottom: 1rem;
         color: #FFFFFF;
+    }
+
+    .subsection-label {
+        font-size: 1.15rem;
+        font-weight: 800;
+        color: #F3F4F6;
+        margin-top: 1rem;
+        margin-bottom: 0.5rem;
     }
 
     .metric-card {
@@ -123,8 +133,9 @@ st.markdown(
     }
 
     .metric-label {
-        color: #AAB0B6;
-        font-size: 0.92rem;
+        color: #D1D5DB;
+        font-size: 0.95rem;
+        font-weight: 700;
         margin-bottom: 0.25rem;
     }
 
@@ -147,6 +158,7 @@ st.markdown(
         font-size: 1rem;
         font-weight: 700;
         margin-bottom: 0.5rem;
+        color: #F9FAFB;
     }
 
     .table-wrap {
@@ -170,7 +182,7 @@ st.markdown(
     .clean-table th {
         text-align: left;
         padding: 14px 16px;
-        color: #C9D1D9;
+        color: #E5E7EB;
         font-weight: 700;
         border-bottom: 1px solid rgba(255,255,255,0.08);
     }
@@ -187,6 +199,25 @@ st.markdown(
 
     .clean-table tbody tr:hover {
         background: rgba(255,255,255,0.03);
+    }
+
+    label, .stMarkdown, .stText, .stNumberInput label {
+        color: #E5E7EB !important;
+        font-weight: 600 !important;
+    }
+
+    div[data-testid="stNumberInput"] label,
+    div[data-testid="stTextInput"] label,
+    div[data-testid="stSelectbox"] label,
+    div[data-testid="stCheckbox"] label {
+        color: #F3F4F6 !important;
+        font-weight: 700 !important;
+        font-size: 14px !important;
+    }
+
+    h3, h4 {
+        color: #F3F4F6 !important;
+        font-weight: 800 !important;
     }
 
     .stTextInput > div > div > input,
@@ -218,7 +249,7 @@ st.markdown(
     section[data-testid="stSidebar"] .stMarkdown,
     section[data-testid="stSidebar"] p,
     section[data-testid="stSidebar"] div {
-        color: #E2ECFF !important;
+        color: #F3F4F6 !important;
     }
 
     .sidebar-brand {
@@ -238,7 +269,7 @@ st.markdown(
     }
 
     .small-note {
-        color: #9CA3AF;
+        color: #CBD5E1;
         font-size: 13px;
     }
 
@@ -275,8 +306,9 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
+
 # -----------------------------
-# Helpers
+# Helper functions
 # -----------------------------
 def format_dollar_short(value):
     if value is None or pd.isna(value):
@@ -420,32 +452,62 @@ def estimate_wacc(info: dict, financials: pd.DataFrame, balance_sheet: pd.DataFr
     tax_rate_used = tax_rate_fallback if tax_rate_fallback is not None else 0.21
     wacc = (equity / (equity + debt)) * cost_of_equity + (debt / (equity + debt)) * cost_of_debt * (1 - tax_rate_used)
     return max(0.05, min(wacc, 0.15))
-
-
-PEER_MAP = {
-    "AAPL": ["MSFT", "GOOGL", "NVDA", "AMZN"],
-    "MSFT": ["AAPL", "GOOGL", "ORCL", "NVDA"],
-    "GOOGL": ["META", "MSFT", "AMZN", "NFLX"],
-    "META": ["GOOGL", "NFLX", "SNAP", "PINS"],
-    "NVDA": ["AMD", "INTC", "AVGO", "QCOM"],
-    "AMD": ["NVDA", "INTC", "AVGO", "QCOM"],
-    "AMZN": ["WMT", "COST", "SHOP", "BABA"],
-    "TSLA": ["GM", "F", "RIVN", "LCID"],
-    "JPM": ["BAC", "C", "WFC", "GS"],
-    "NFLX": ["DIS", "WBD", "GOOGL", "META"],
-    "ORCL": ["MSFT", "SAP", "CRM", "IBM"],
-    "CRM": ["ORCL", "MSFT", "ADBE", "NOW"],
+    # -----------------------------
+# Peer logic
+# -----------------------------
+INDUSTRY_PEER_RULES = {
+    "beauty": ["EL", "COTY", "SBH", "TGT", "COST"],
+    "cosmetic": ["EL", "COTY", "SBH", "TGT", "COST"],
+    "specialty retail": ["ULTA", "BBY", "ROST", "TJX", "TGT"],
+    "apparel retail": ["ROST", "TJX", "BURL", "GPS", "TGT"],
+    "discount stores": ["DG", "DLTR", "WMT", "TGT", "COST"],
+    "semiconductor": ["NVDA", "AMD", "AVGO", "QCOM", "INTC"],
+    "software": ["MSFT", "ORCL", "CRM", "ADBE", "NOW"],
+    "internet content": ["GOOGL", "META", "NFLX", "SNAP", "PINS"],
+    "banks": ["JPM", "BAC", "C", "WFC", "GS"],
+    "oil": ["XOM", "CVX", "COP", "SLB", "EOG"],
+    "airline": ["DAL", "UAL", "AAL", "LUV", "ALK"],
+    "restaurant": ["MCD", "CMG", "YUM", "SBUX", "DPZ"],
+    "home improvement": ["HD", "LOW", "WSM", "RH", "FND"],
+    "ecommerce": ["AMZN", "SHOP", "EBAY", "BABA", "MELI"],
+    "auto": ["TSLA", "GM", "F", "RIVN", "LCID"],
 }
 
-SECTOR_PEERS = {
-    "Technology": ["MSFT", "AAPL", "NVDA", "ORCL"],
-    "Communication Services": ["GOOGL", "META", "NFLX", "DIS"],
-    "Financial Services": ["JPM", "BAC", "GS", "MS"],
-    "Consumer Defensive": ["PG", "KO", "PEP", "WMT"],
-    "Consumer Cyclical": ["AMZN", "TSLA", "HD", "MCD"],
+SECTOR_FALLBACK_PEERS = {
+    "Technology": ["MSFT", "AAPL", "NVDA", "ORCL", "CRM"],
+    "Communication Services": ["GOOGL", "META", "NFLX", "DIS", "TMUS"],
+    "Financial Services": ["JPM", "BAC", "GS", "MS", "WFC"],
+    "Consumer Defensive": ["WMT", "COST", "PG", "KO", "PEP"],
+    "Consumer Cyclical": ["TGT", "COST", "HD", "LOW", "ROST"],
+    "Healthcare": ["UNH", "JNJ", "PFE", "MRK", "ABBV"],
+    "Energy": ["XOM", "CVX", "COP", "SLB", "EOG"],
+    "Industrials": ["CAT", "DE", "GE", "HON", "MMM"],
 }
 
 
+def suggest_peers(symbol: str, sector: Optional[str], industry: Optional[str], company_name: Optional[str]) -> List[str]:
+    symbol = normalize_symbol(symbol)
+    combined = " ".join(
+        [
+            str(company_name or "").lower(),
+            str(industry or "").lower(),
+            str(sector or "").lower(),
+        ]
+    )
+
+    for keyword, peers in INDUSTRY_PEER_RULES.items():
+        if keyword in combined:
+            return [p for p in peers if p != symbol]
+
+    if sector in SECTOR_FALLBACK_PEERS:
+        return [p for p in SECTOR_FALLBACK_PEERS[sector] if p != symbol]
+
+    return [p for p in ["TGT", "COST", "HD", "LOW", "ROST"] if p != symbol]
+
+
+# -----------------------------
+# Data loaders
+# -----------------------------
 @st.cache_data(ttl=1800)
 def resolve_company_input(query: str) -> dict:
     clean_query = query.strip()
@@ -576,15 +638,34 @@ def get_peer_metrics(tickers: Tuple[str, ...]) -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
-def suggest_peers(symbol: str, sector: Optional[str]) -> List[str]:
-    symbol = normalize_symbol(symbol)
-    if symbol in PEER_MAP:
-        return [x for x in PEER_MAP[symbol] if x != symbol]
-    if sector in SECTOR_PEERS:
-        return [x for x in SECTOR_PEERS[sector] if x != symbol]
-    return ["MSFT", "GOOGL", "NVDA", "AMZN"]
+@st.cache_data(ttl=1800)
+def get_normalized_performance_chart_data(main_symbol: str, peer_symbols: Tuple[str, ...], period: str = "1y") -> pd.DataFrame:
+    symbols = [main_symbol] + list(peer_symbols)
+    rows = []
+
+    for sym in symbols:
+        try:
+            hist = yf.Ticker(sym).history(period=period)
+            if hist.empty or "Close" not in hist.columns:
+                continue
+            closes = hist["Close"].dropna()
+            if closes.empty:
+                continue
+            base = closes.iloc[0]
+            if base == 0:
+                continue
+            normalized = (closes / base) * 100
+            for dt, value in normalized.items():
+                rows.append({"Date": dt, "Ticker": sym, "Normalized": float(value)})
+        except Exception:
+            continue
+
+    return pd.DataFrame(rows)
 
 
+# -----------------------------
+# Core model
+# -----------------------------
 def run_dcf(
     base_revenue,
     ebit_margin,
@@ -721,9 +802,7 @@ def build_balance_sheet_lite(balance_sheet: pd.DataFrame, forecast_df: pd.DataFr
         )
 
     return pd.DataFrame(rows)
-
-
-def get_recommendation(upside_downside: float):
+    def get_recommendation(upside_downside: float):
     if upside_downside >= 20:
         return "STRONG BUY", "#16A34A"
     if upside_downside >= 10:
@@ -758,6 +837,9 @@ def build_excel_file(
     return output.getvalue()
 
 
+# -----------------------------
+# Charts
+# -----------------------------
 def plot_price_chart(hist_df: pd.DataFrame, company_name: str, chart_label: str):
     fig = go.Figure()
     fig.add_trace(
@@ -871,6 +953,37 @@ def plot_balance_chart(balance_df: pd.DataFrame):
     return fig
 
 
+def plot_stock_vs_peers_chart(df: pd.DataFrame):
+    if df.empty:
+        return None
+
+    fig = go.Figure()
+    for ticker in df["Ticker"].dropna().unique():
+        sub = df[df["Ticker"] == ticker]
+        fig.add_trace(
+            go.Scatter(
+                x=sub["Date"],
+                y=sub["Normalized"],
+                mode="lines",
+                name=ticker,
+                line=dict(width=3 if ticker == df["Ticker"].iloc[0] else 2),
+            )
+        )
+
+    fig.update_layout(
+        title="Stock vs Peers Performance (Normalized to 100)",
+        template="plotly_dark",
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="#111827",
+        font=dict(color="#F9FAFB"),
+        margin=dict(l=20, r=20, t=50, b=20),
+        xaxis_title="Date",
+        yaxis_title="Normalized Price",
+        height=420,
+    )
+    return fig
+
+
 # -----------------------------
 # Sidebar
 # -----------------------------
@@ -921,6 +1034,7 @@ with st.sidebar:
 
     if st.button("Run Model", use_container_width=True):
         st.session_state["model_loaded"] = True
+
 
 # -----------------------------
 # Home page before model
@@ -991,11 +1105,14 @@ else:
         auto_capex_percent = capex / revenue
         auto_nwc_percent = 0.0
 
-        # -----------------------------
-        # Inputs live on their pages
+        latest_historical_fcf = ((operating_income * (1 - (auto_tax_rate if auto_tax_rate is not None else 0.21))) + depreciation - capex)
+        fcf_margin = latest_historical_fcf / revenue if revenue else None
+        net_debt_to_market_cap = (auto_net_debt / market_cap) if auto_net_debt is not None and market_cap not in (None, 0) else None
+                # -----------------------------
+        # Inputs live on relevant pages
         # -----------------------------
         if page == "Income Statement Forecast":
-            st.markdown('<div class="section-label">Income Statement Assumptions</div>', unsafe_allow_html=True)
+            st.markdown('<div class="section-label">Income Statement Forecast</div>', unsafe_allow_html=True)
 
             c1, c2 = st.columns(2)
             with c1:
@@ -1018,6 +1135,10 @@ else:
                     value=float(st.session_state["ebit_margin_pct"]),
                     step=0.5,
                 )
+                st.session_state["tax_auto"] = st.checkbox(
+                    "Use latest tax rate automatically",
+                    value=st.session_state["tax_auto"],
+                )
                 st.session_state["tax_rate_pct"] = st.number_input(
                     "Tax Rate (%)",
                     value=float(st.session_state["tax_rate_pct"]),
@@ -1037,7 +1158,7 @@ else:
             st.markdown(html_table(auto_table), unsafe_allow_html=True)
 
         elif page == "Balance Sheet Forecast":
-            st.markdown('<div class="section-label">Balance Sheet Assumptions</div>', unsafe_allow_html=True)
+            st.markdown('<div class="section-label">Balance Sheet Forecast</div>', unsafe_allow_html=True)
 
             c1, c2 = st.columns(2)
             with c1:
@@ -1083,7 +1204,7 @@ else:
             st.markdown(html_table(auto_table), unsafe_allow_html=True)
 
         elif page == "Cash Flow Statement Forecast":
-            st.markdown('<div class="section-label">Cash Flow Assumptions</div>', unsafe_allow_html=True)
+            st.markdown('<div class="section-label">Cash Flow Statement Forecast</div>', unsafe_allow_html=True)
 
             c1, c2 = st.columns(2)
             with c1:
@@ -1119,7 +1240,7 @@ else:
             st.markdown(html_table(auto_table), unsafe_allow_html=True)
 
         elif page == "DCF Valuation":
-            st.markdown('<div class="section-label">Valuation Assumptions</div>', unsafe_allow_html=True)
+            st.markdown('<div class="section-label">DCF Valuation</div>', unsafe_allow_html=True)
 
             c1, c2 = st.columns(2)
             with c1:
@@ -1147,10 +1268,6 @@ else:
                         step=1,
                     )
                 )
-                st.session_state["manual_peers"] = st.text_input(
-                    "Custom Peer Tickers (comma-separated)",
-                    value=st.session_state["manual_peers"],
-                )
 
             auto_table = pd.DataFrame(
                 {
@@ -1163,16 +1280,31 @@ else:
             )
             st.markdown(html_table(auto_table), unsafe_allow_html=True)
 
+        elif page == "Comps Valuation":
+            st.markdown('<div class="section-label">Comps Valuation</div>', unsafe_allow_html=True)
+
+            c1, c2 = st.columns(2)
+            with c1:
+                st.session_state["use_auto_peers"] = st.checkbox(
+                    "Use suggested peers automatically",
+                    value=st.session_state["use_auto_peers"],
+                )
+            with c2:
+                st.session_state["manual_peers"] = st.text_input(
+                    "Custom Peer Tickers (comma-separated)",
+                    value=st.session_state["manual_peers"],
+                )
+
         # -----------------------------
         # Use assumptions
         # -----------------------------
         revenue_growth_used = historical_revenue_cagr if (st.session_state["revenue_auto"] and historical_revenue_cagr is not None) else st.session_state["revenue_growth_pct"] / 100
         ebit_margin_used = auto_ebit_margin if st.session_state["operating_auto"] else st.session_state["ebit_margin_pct"] / 100
+        tax_rate_used = auto_tax_rate if (st.session_state["tax_auto"] and auto_tax_rate is not None) else st.session_state["tax_rate_pct"] / 100
         da_percent_used = auto_da_percent if st.session_state["da_auto"] else st.session_state["da_pct"] / 100
         capex_percent_used = auto_capex_percent if st.session_state["capex_auto"] else st.session_state["capex_pct"] / 100
         nwc_percent_used = auto_nwc_percent if st.session_state["nwc_auto"] else st.session_state["nwc_pct"] / 100
 
-        tax_rate_used = auto_tax_rate if auto_tax_rate is not None else st.session_state["tax_rate_pct"] / 100
         wacc_used = auto_wacc if st.session_state["valuation_auto"] else st.session_state["wacc_pct"] / 100
         terminal_growth_used = auto_terminal_growth if st.session_state["valuation_auto"] else st.session_state["terminal_growth_pct"] / 100
         net_debt_used = auto_net_debt if (st.session_state["net_debt_auto"] and auto_net_debt is not None) else st.session_state["net_debt"]
@@ -1215,8 +1347,8 @@ else:
         upside_downside = ((implied_price - current_price) / current_price) * 100 if current_price else 0
         recommendation, rec_color = get_recommendation(upside_downside)
 
-        suggested_peers = suggest_peers(resolved_symbol, sector)
-        peer_list = [normalize_symbol(x) for x in st.session_state["manual_peers"].split(",") if x.strip()] if st.session_state["manual_peers"].strip() else suggested_peers
+        auto_peer_list = suggest_peers(resolved_symbol, sector, industry, company_name)
+        peer_list = auto_peer_list if st.session_state["use_auto_peers"] or not st.session_state["manual_peers"].strip() else [normalize_symbol(x) for x in st.session_state["manual_peers"].split(",") if x.strip()]
         peer_df = get_peer_metrics(tuple(peer_list))
 
         peer_raw_rows = []
@@ -1236,8 +1368,13 @@ else:
         peer_raw_df = pd.DataFrame(peer_raw_rows)
         avg_trailing_pe = pd.to_numeric(peer_raw_df.get("Trailing P/E"), errors="coerce").dropna().mean() if not peer_raw_df.empty else None
         avg_forward_pe = pd.to_numeric(peer_raw_df.get("Forward P/E"), errors="coerce").dropna().mean() if not peer_raw_df.empty else None
+
         trailing_comps_value = avg_trailing_pe * trailing_eps if avg_trailing_pe and trailing_eps else None
         forward_comps_value = avg_forward_pe * forward_eps if avg_forward_pe and forward_eps else None
+
+        valid_comps_values = [x for x in [trailing_comps_value, forward_comps_value] if x is not None]
+        comps_price = sum(valid_comps_values) / len(valid_comps_values) if valid_comps_values else None
+        blended_price = ((implied_price + comps_price) / 2) if comps_price is not None else implied_price
 
         scenario_inputs = {
             "Bear": {"growth": max(revenue_growth_used - 0.02, 0), "wacc": wacc_used + 0.01, "tg": max(terminal_growth_used - 0.005, 0)},
@@ -1246,6 +1383,7 @@ else:
         }
 
         scenario_rows = []
+        scenario_prices = {}
         for scenario_name, vals in scenario_inputs.items():
             try:
                 scenario_result = run_dcf(
@@ -1262,6 +1400,7 @@ else:
                     net_debt=net_debt_used,
                     projection_years=projection_years,
                 )
+                scenario_prices[scenario_name] = scenario_result["implied_price"]
                 scenario_rows.append(
                     {
                         "Scenario": scenario_name,
@@ -1272,6 +1411,7 @@ else:
                     }
                 )
             except Exception:
+                scenario_prices[scenario_name] = None
                 scenario_rows.append(
                     {
                         "Scenario": scenario_name,
@@ -1283,6 +1423,10 @@ else:
                 )
 
         scenario_df = pd.DataFrame(scenario_rows)
+
+        valuation_range_low = scenario_prices.get("Bear")
+        valuation_range_mid = scenario_prices.get("Base")
+        valuation_range_high = scenario_prices.get("Bull")
 
         wacc_values = [0.07, 0.08, 0.09, 0.10]
         tg_values = [0.02, 0.025, 0.03]
@@ -1319,13 +1463,18 @@ else:
 
         sensitivity_df = pd.DataFrame(sensitivity_rows)
 
+        perf_df = get_normalized_performance_chart_data(resolved_symbol, tuple(peer_list[:4]), "1y")
+        perf_fig = plot_stock_vs_peers_chart(perf_df)
+
         summary_df = pd.DataFrame(
             [
                 {
                     "Company": company_name,
                     "Ticker": resolved_symbol,
                     "Current Price": current_price,
-                    "Implied Price": implied_price,
+                    "DCF Price": implied_price,
+                    "Comps Price": comps_price,
+                    "Blended Price": blended_price,
                     "Upside/Downside %": upside_downside,
                     "Recommendation": recommendation,
                     "Enterprise Value": enterprise_value,
@@ -1367,7 +1516,7 @@ else:
         )
 
         st.caption(f"Matched Input: {company_name} ({resolved_symbol})")
-        st.caption(f"Suggested Peers: {', '.join(suggested_peers)}")
+        st.caption(f"Suggested Peers: {', '.join(peer_list)}")
 
         if page == "Home":
             st.markdown('<div class="section-label">Welcome!</div>', unsafe_allow_html=True)
@@ -1394,15 +1543,25 @@ else:
         elif page == "Overview":
             st.markdown('<div class="section-label">Overview</div>', unsafe_allow_html=True)
 
-            c1, c2, c3, c4 = st.columns(4)
+            c1, c2, c3, c4, c5 = st.columns(5)
             with c1:
                 st.markdown(f"""<div class="metric-card"><div class="metric-label">Current Price</div><div class="metric-value">{format_dollar_short(current_price)}</div></div>""", unsafe_allow_html=True)
             with c2:
-                st.markdown(f"""<div class="metric-card"><div class="metric-label">Implied Price</div><div class="metric-value">{format_dollar_short(implied_price)}</div></div>""", unsafe_allow_html=True)
+                st.markdown(f"""<div class="metric-card"><div class="metric-label">DCF Price</div><div class="metric-value">{format_dollar_short(implied_price)}</div></div>""", unsafe_allow_html=True)
             with c3:
-                st.markdown(f"""<div class="metric-card"><div class="metric-label">Upside / Downside</div><div class="metric-value">{format_percent(upside_downside)}</div></div>""", unsafe_allow_html=True)
+                st.markdown(f"""<div class="metric-card"><div class="metric-label">Comps Price</div><div class="metric-value">{format_dollar_short(comps_price)}</div></div>""", unsafe_allow_html=True)
             with c4:
+                st.markdown(f"""<div class="metric-card"><div class="metric-label">Blended Price</div><div class="metric-value">{format_dollar_short(blended_price)}</div></div>""", unsafe_allow_html=True)
+            with c5:
                 st.markdown(f"""<div class="metric-card"><div class="metric-label">Recommendation</div><div class="metric-value" style="color:{rec_color};">{recommendation}</div></div>""", unsafe_allow_html=True)
+
+            r1, r2, r3 = st.columns(3)
+            with r1:
+                st.markdown(f"""<div class="metric-card"><div class="metric-label">Low Valuation</div><div class="metric-value">{format_dollar_short(valuation_range_low)}</div></div>""", unsafe_allow_html=True)
+            with r2:
+                st.markdown(f"""<div class="metric-card"><div class="metric-label">Base Valuation</div><div class="metric-value">{format_dollar_short(valuation_range_mid)}</div></div>""", unsafe_allow_html=True)
+            with r3:
+                st.markdown(f"""<div class="metric-card"><div class="metric-label">High Valuation</div><div class="metric-value">{format_dollar_short(valuation_range_high)}</div></div>""", unsafe_allow_html=True)
 
             st.markdown(
                 f"""
@@ -1414,7 +1573,7 @@ else:
                         Market Cap: <b>{format_dollar_short(market_cap)}</b><br>
                         Sector / Industry: <b>{sector or 'N/A'}</b> / <b>{industry or 'N/A'}</b>
                     </div>
-                    <div style="margin-top:12px; color:#AAB0B6; font-size:14px;">
+                    <div style="margin-top:12px; color:#E5E7EB; font-size:14px;">
                         Assumptions Used: Revenue Growth {revenue_growth_used*100:.1f}% | WACC {wacc_used*100:.1f}% | Terminal Growth {terminal_growth_used*100:.1f}%
                     </div>
                 </div>
@@ -1438,10 +1597,23 @@ else:
             with m4:
                 st.markdown(f"""<div class="metric-card"><div class="metric-label">Current Price</div><div class="metric-value">{format_dollar_short(current_price)}</div></div>""", unsafe_allow_html=True)
 
+            k1, k2, k3, k4 = st.columns(4)
+            with k1:
+                st.markdown(f"""<div class="metric-card"><div class="metric-label">3Y Revenue CAGR</div><div class="metric-value">{format_percent((historical_revenue_cagr or 0)*100 if historical_revenue_cagr is not None else None)}</div></div>""", unsafe_allow_html=True)
+            with k2:
+                st.markdown(f"""<div class="metric-card"><div class="metric-label">EBIT Margin</div><div class="metric-value">{format_percent(auto_ebit_margin*100)}</div></div>""", unsafe_allow_html=True)
+            with k3:
+                st.markdown(f"""<div class="metric-card"><div class="metric-label">FCF Margin</div><div class="metric-value">{format_percent(fcf_margin*100 if fcf_margin is not None else None)}</div></div>""", unsafe_allow_html=True)
+            with k4:
+                st.markdown(f"""<div class="metric-card"><div class="metric-label">Net Debt / Market Cap</div><div class="metric-value">{format_percent(net_debt_to_market_cap*100 if net_debt_to_market_cap is not None else None)}</div></div>""", unsafe_allow_html=True)
+
             if not hist_chart.empty:
                 st.plotly_chart(plot_price_chart(hist_chart, company_name, chart_label), use_container_width=True)
 
-            st.markdown('<div class="section-label">Peer Comparison</div>', unsafe_allow_html=True)
+            if perf_fig is not None:
+                st.plotly_chart(perf_fig, use_container_width=True)
+
+            st.markdown('<div class="subsection-label">Peer Comparison</div>', unsafe_allow_html=True)
             st.markdown(html_table(peer_df), unsafe_allow_html=True)
 
             peer_fig = plot_peer_pe_chart(peer_df)
@@ -1449,8 +1621,21 @@ else:
                 st.plotly_chart(peer_fig, use_container_width=True)
 
         elif page == "Income Statement Forecast":
-            st.markdown('<div class="section-label">Income Statement Forecast</div>', unsafe_allow_html=True)
-            st.plotly_chart(plot_income_chart(forecast_df), use_container_width=True)
+            st.plotly_chart(
+                plot_income_chart(
+                    build_forecast_model(
+                        base_revenue=revenue,
+                        ebit_margin=ebit_margin_used,
+                        da_percent=da_percent_used,
+                        capex_percent=capex_percent_used,
+                        nwc_percent=nwc_percent_used,
+                        tax_rate=tax_rate_used,
+                        growth_rate=revenue_growth_used,
+                        projection_years=projection_years,
+                    )[0]
+                ),
+                use_container_width=True,
+            )
 
             income_display = income_statement_df.copy()
             for col in income_display.columns:
@@ -1459,7 +1644,6 @@ else:
             st.markdown(html_table(income_display), unsafe_allow_html=True)
 
         elif page == "Balance Sheet Forecast":
-            st.markdown('<div class="section-label">Balance Sheet Forecast</div>', unsafe_allow_html=True)
             st.plotly_chart(plot_balance_chart(balance_df), use_container_width=True)
 
             balance_display = balance_df.copy()
@@ -1469,8 +1653,21 @@ else:
             st.markdown(html_table(balance_display), unsafe_allow_html=True)
 
         elif page == "Cash Flow Statement Forecast":
-            st.markdown('<div class="section-label">Cash Flow Statement Forecast</div>', unsafe_allow_html=True)
-            st.plotly_chart(plot_cashflow_chart(forecast_df), use_container_width=True)
+            st.plotly_chart(
+                plot_cashflow_chart(
+                    build_forecast_model(
+                        base_revenue=revenue,
+                        ebit_margin=ebit_margin_used,
+                        da_percent=da_percent_used,
+                        capex_percent=capex_percent_used,
+                        nwc_percent=nwc_percent_used,
+                        tax_rate=tax_rate_used,
+                        growth_rate=revenue_growth_used,
+                        projection_years=projection_years,
+                    )[0]
+                ),
+                use_container_width=True,
+            )
 
             cashflow_display = cashflow_forecast_df.copy()
             for col in cashflow_display.columns:
@@ -1479,15 +1676,13 @@ else:
             st.markdown(html_table(cashflow_display), unsafe_allow_html=True)
 
         elif page == "DCF Valuation":
-            st.markdown('<div class="section-label">DCF Valuation</div>', unsafe_allow_html=True)
-
             d1, d2, d3 = st.columns(3)
             with d1:
                 st.markdown(f"""<div class="metric-card"><div class="metric-label">Enterprise Value</div><div class="metric-value">{format_dollar_short(enterprise_value)}</div></div>""", unsafe_allow_html=True)
             with d2:
-                st.markdown(f"""<div class="metric-card"><div class="metric-label">Implied Price</div><div class="metric-value">{format_dollar_short(implied_price)}</div></div>""", unsafe_allow_html=True)
+                st.markdown(f"""<div class="metric-card"><div class="metric-label">DCF Price</div><div class="metric-value">{format_dollar_short(implied_price)}</div></div>""", unsafe_allow_html=True)
             with d3:
-                st.markdown(f"""<div class="metric-card"><div class="metric-label">Recommendation</div><div class="metric-value" style="color:{rec_color};">{recommendation}</div></div>""", unsafe_allow_html=True)
+                st.markdown(f"""<div class="metric-card"><div class="metric-label">Blended Price</div><div class="metric-value">{format_dollar_short(blended_price)}</div></div>""", unsafe_allow_html=True)
 
             assumptions_df = pd.DataFrame(
                 {
@@ -1530,18 +1725,22 @@ else:
             st.markdown(html_table(projection_df_display), unsafe_allow_html=True)
 
         elif page == "Comps Valuation":
-            st.markdown('<div class="section-label">Comps Valuation</div>', unsafe_allow_html=True)
-
-            c1, c2 = st.columns(2)
+            c1, c2, c3 = st.columns(3)
             with c1:
-                st.markdown(f"""<div class="metric-card"><div class="metric-label">Trailing P/E Implied Price</div><div class="metric-value">{format_dollar_short(trailing_comps_value)}</div></div>""", unsafe_allow_html=True)
+                st.markdown(f"""<div class="metric-card"><div class="metric-label">Trailing P/E Price</div><div class="metric-value">{format_dollar_short(trailing_comps_value)}</div></div>""", unsafe_allow_html=True)
             with c2:
-                st.markdown(f"""<div class="metric-card"><div class="metric-label">Forward P/E Implied Price</div><div class="metric-value">{format_dollar_short(forward_comps_value)}</div></div>""", unsafe_allow_html=True)
+                st.markdown(f"""<div class="metric-card"><div class="metric-label">Forward P/E Price</div><div class="metric-value">{format_dollar_short(forward_comps_value)}</div></div>""", unsafe_allow_html=True)
+            with c3:
+                st.markdown(f"""<div class="metric-card"><div class="metric-label">Comps Price</div><div class="metric-value">{format_dollar_short(comps_price)}</div></div>""", unsafe_allow_html=True)
 
             st.markdown(html_table(peer_df), unsafe_allow_html=True)
 
+            peer_fig = plot_peer_pe_chart(peer_df)
+            if peer_fig is not None:
+                st.plotly_chart(peer_fig, use_container_width=True)
+
         elif page == "Sensitivity":
-            st.markdown('<div class="section-label">Sensitivity</div>', unsafe_allow_html=True)
+            st.markdown("### Sensitivity Heatmap")
 
             heatmap_fig = go.Figure(
                 data=go.Heatmap(
@@ -1565,10 +1764,22 @@ else:
             )
             st.plotly_chart(heatmap_fig, use_container_width=True)
 
-            st.markdown('<div class="section-label">Scenario Analysis</div>', unsafe_allow_html=True)
+            st.markdown('<div class="subsection-label">Scenario Analysis</div>', unsafe_allow_html=True)
             st.markdown(html_table(scenario_df), unsafe_allow_html=True)
 
-            st.markdown('<div class="section-label">Sensitivity Table</div>', unsafe_allow_html=True)
+            st.markdown('<div class="subsection-label">Scenario Narrative</div>', unsafe_allow_html=True)
+            st.markdown(
+                """
+                <div class="summary-box">
+                    <div><b>Bear Case:</b> Lower growth, higher discount rate, and softer terminal value assumptions.</div>
+                    <div style="margin-top:8px;"><b>Base Case:</b> Current operating and valuation assumptions applied as the central forecast.</div>
+                    <div style="margin-top:8px;"><b>Bull Case:</b> Stronger growth, lower discount rate, and better terminal value assumptions.</div>
+                </div>
+                """,
+                unsafe_allow_html=True,
+            )
+
+            st.markdown('<div class="subsection-label">Sensitivity Table</div>', unsafe_allow_html=True)
             st.markdown(html_table(sensitivity_df), unsafe_allow_html=True)
 
         elif page == "Export":
