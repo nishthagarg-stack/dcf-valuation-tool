@@ -232,7 +232,7 @@ st.markdown(
     }
 
     h3, h4 {
-        color: #F3F4F6 !important;
+        color: #93C5FD !important;
         font-weight: 800 !important;
     }
 
