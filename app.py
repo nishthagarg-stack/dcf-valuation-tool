@@ -921,8 +921,20 @@ def plot_peer_pe_chart(peer_df: pd.DataFrame):
 
 def plot_income_chart(forecast_df: pd.DataFrame):
     fig = go.Figure()
-    fig.add_trace(go.Scatter(x=forecast_df["Year"], y=forecast_df["Revenue ($M)"], mode="lines+markers", name="Revenue ($M)", line=dict(color="#38BDF8", width=4)))
-    fig.add_trace(go.Scatter(x=forecast_df["Year"], y=forecast_df["EBIT ($M)"], mode="lines+markers", name="EBIT ($M)", line=dict(color="#F59E0B", width=4)))
+    fig.add_trace(go.Scatter(
+        x=forecast_df["Year"], 
+        y=forecast_df["Revenue ($M)"], 
+        mode="lines+markers", 
+        name="Revenue ($M)", 
+        line=dict(color="#3B82F6", width=3)
+    ))
+    fig.add_trace(go.Scatter(
+        x=forecast_df["Year"], 
+        y=forecast_df["EBIT ($M)"], 
+        mode="lines+markers", 
+        name="EBIT ($M)", 
+        line=dict(color="#EC4899", width=3)
+    ))
     fig.update_layout(
         title=dict(
             text="Revenue vs EBIT Forecast",
