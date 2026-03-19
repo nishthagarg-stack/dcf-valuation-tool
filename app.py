@@ -21,7 +21,7 @@ st.set_page_config(
 # -----------------------------
 st.markdown(
     """
-    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;800&family=Caveat:wght@700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600;800&family=Playfair+Display:ital,wght@1,700&display=swap" rel="stylesheet">
 
     <style>
     html, body, [class*="css"] {
@@ -43,14 +43,16 @@ st.markdown(
         margin-bottom: 1.2rem;
     }
 
-    .ng-script {
-        font-family: 'Caveat', cursive;
-        font-size: 64px;
+    .ng-italic {
+        font-family: 'Playfair Display', serif;
+        font-style: italic;
+        font-size: 48px;
         font-weight: 700;
-        color: #EAF2FF;
+        color: #F4F8FF;
         line-height: 1;
-        margin-bottom: 4px;
-        text-shadow: 0 0 18px rgba(96,165,250,0.22);
+        margin-bottom: 6px;
+        letter-spacing: 1px;
+        text-shadow: 0 0 14px rgba(96,165,250,0.18);
     }
 
     .title-text {
@@ -164,13 +166,15 @@ st.markdown(
     }
 
     .stButton > button,
-    .stDownloadButton > button {
+    .stDownloadButton > button,
+    .stLinkButton > a {
         background: linear-gradient(90deg, #38BDF8 0%, #60A5FA 100%) !important;
         color: #08101F !important;
         font-weight: 700 !important;
         border-radius: 12px !important;
         padding: 0.65rem 1.2rem !important;
         border: none !important;
+        text-decoration: none !important;
     }
 
     section[data-testid="stSidebar"] {
@@ -181,11 +185,7 @@ st.markdown(
     section[data-testid="stSidebar"] .stMarkdown,
     section[data-testid="stSidebar"] p,
     section[data-testid="stSidebar"] div {
-        color: #D7E3FF !important;
-    }
-
-    section[data-testid="stSidebar"] .small-note {
-        color: #94A3B8 !important;
+        color: #E2ECFF !important;
     }
 
     .sidebar-brand {
@@ -193,13 +193,14 @@ st.markdown(
         margin-bottom: 1rem;
     }
 
-    .sidebar-ng-script {
-        font-family: 'Caveat', cursive;
-        font-size: 42px;
-        color: #F5F9FF;
-        text-shadow: 0 0 14px rgba(96,165,250,0.22);
+    .sidebar-ng {
+        font-family: 'Playfair Display', serif;
+        font-style: italic;
+        font-size: 34px;
+        color: #F4F8FF;
         line-height: 1;
         margin-bottom: 4px;
+        text-shadow: 0 0 10px rgba(96,165,250,0.18);
     }
 
     .small-note {
@@ -219,27 +220,7 @@ st.markdown(
         font-size: 1.05rem;
         line-height: 1.8;
         color: #E8EEF8;
-    }
-
-    .link-row {
-        display: flex;
-        gap: 12px;
-        flex-wrap: wrap;
-        margin-top: 16px;
-    }
-
-    .link-btn {
-        text-decoration: none;
-        padding: 10px 16px;
-        border-radius: 12px;
-        border: 1px solid rgba(255,255,255,0.14);
-        color: #EAF2FF;
-        background: rgba(255,255,255,0.03);
-        font-weight: 600;
-    }
-
-    .link-btn:hover {
-        background: rgba(255,255,255,0.08);
+        margin-bottom: 1rem;
     }
     </style>
     """,
@@ -252,7 +233,7 @@ st.markdown(
 st.markdown(
     """
     <div class="brand-container">
-        <div class="ng-script">ng</div>
+        <div class="ng-italic">NG</div>
         <div class="title-text">Valuation Lab</div>
         <div class="subtitle-text">by Nishtha Garg</div>
     </div>
@@ -325,22 +306,87 @@ def normalize_symbol(text: str) -> str:
     return alias_map.get(raw, raw)
 
 
+def get_row_value(df: pd.DataFrame, possible_rows: List[str]) -> Optional[float]:
+    if df is None or df.empty:
+        return None
+    for row_name in possible_rows:
+        if row_name in df.index:
+            try:
+                return float(df.loc[row_name].iloc[0])
+            except Exception:
+                continue
+    return None
+
+
 def calculate_revenue_cagr(financials: pd.DataFrame) -> Optional[float]:
     try:
         revenues = financials.loc["Total Revenue"].dropna()
         if len(revenues) < 4:
             return None
-
         latest = float(revenues.iloc[0])
         three_year_old = float(revenues.iloc[3])
-
         if latest <= 0 or three_year_old <= 0:
             return None
-
-        cagr = (latest / three_year_old) ** (1 / 3) - 1
-        return cagr
+        return (latest / three_year_old) ** (1 / 3) - 1
     except Exception:
         return None
+
+
+def estimate_tax_rate(financials: pd.DataFrame) -> Optional[float]:
+    tax_expense = get_row_value(financials, ["Tax Provision", "Income Tax Expense"])
+    pretax_income = get_row_value(financials, ["Pretax Income", "Income Before Tax", "Ebt", "Pre Tax Income"])
+    if tax_expense is None or pretax_income is None or pretax_income == 0:
+        return None
+    rate = abs(tax_expense / pretax_income)
+    if 0 <= rate <= 0.5:
+        return rate
+    return None
+
+
+def estimate_net_debt(balance_sheet: pd.DataFrame) -> Optional[float]:
+    total_debt = get_row_value(
+        balance_sheet,
+        ["Total Debt", "Long Term Debt And Capital Lease Obligation", "Long Term Debt", "Current Debt"],
+    )
+    cash = get_row_value(
+        balance_sheet,
+        ["Cash And Cash Equivalents", "Cash Cash Equivalents And Short Term Investments", "Cash", "Cash And Short Term Investments"],
+    )
+
+    if total_debt is None and cash is None:
+        return None
+
+    total_debt = total_debt or 0.0
+    cash = cash or 0.0
+    return total_debt - cash
+
+
+def estimate_wacc(info: dict, financials: pd.DataFrame, balance_sheet: pd.DataFrame, tax_rate_fallback: float) -> float:
+    beta = info.get("beta")
+    risk_free_rate = 0.0425
+    equity_risk_premium = 0.055
+
+    cost_of_equity = risk_free_rate + (beta * equity_risk_premium if beta is not None else 1.0 * equity_risk_premium)
+
+    interest_expense = get_row_value(financials, ["Interest Expense", "Net Interest Income", "Interest Expense Non Operating"])
+    total_debt = get_row_value(balance_sheet, ["Total Debt", "Long Term Debt", "Long Term Debt And Capital Lease Obligation"])
+
+    if interest_expense is not None and total_debt not in (None, 0):
+        cost_of_debt = min(abs(interest_expense) / abs(total_debt), 0.12)
+    else:
+        cost_of_debt = 0.05
+
+    market_cap = info.get("marketCap")
+    debt = total_debt or 0.0
+    equity = market_cap or 0.0
+
+    if equity + debt == 0:
+        return 0.09
+
+    tax_rate_used = tax_rate_fallback if tax_rate_fallback is not None else 0.21
+
+    wacc = (equity / (equity + debt)) * cost_of_equity + (debt / (equity + debt)) * cost_of_debt * (1 - tax_rate_used)
+    return max(0.05, min(wacc, 0.15))
 
 
 PEER_MAP = {
@@ -376,11 +422,7 @@ def resolve_company_input(query: str) -> dict:
     normalized = normalize_symbol(clean_query)
 
     if is_probable_ticker(normalized):
-        return {
-            "symbol": normalized,
-            "matched_name": normalized,
-            "source": "ticker",
-        }
+        return {"symbol": normalized, "matched_name": normalized, "source": "ticker"}
 
     try:
         search = yf.Search(query=clean_query, max_results=8)
@@ -388,25 +430,12 @@ def resolve_company_input(query: str) -> dict:
         if quotes:
             best = quotes[0]
             symbol = normalize_symbol(best.get("symbol", clean_query.upper()))
-            matched_name = (
-                best.get("shortname")
-                or best.get("longname")
-                or best.get("displayName")
-                or symbol
-            )
-            return {
-                "symbol": symbol,
-                "matched_name": matched_name,
-                "source": "search",
-            }
+            matched_name = best.get("shortname") or best.get("longname") or best.get("displayName") or symbol
+            return {"symbol": symbol, "matched_name": matched_name, "source": "search"}
     except Exception:
         pass
 
-    return {
-        "symbol": normalized,
-        "matched_name": clean_query,
-        "source": "fallback",
-    }
+    return {"symbol": normalized, "matched_name": clean_query, "source": "fallback"}
 
 
 @st.cache_data(ttl=1800)
@@ -443,15 +472,11 @@ def get_market_and_financial_data(symbol: str, chart_period: str) -> dict:
     forward_eps = None
     sector = None
     industry = None
+    info = {}
 
     try:
         info = ticker.info
-        company_name = (
-            info.get("longName")
-            or info.get("shortName")
-            or info.get("displayName")
-            or symbol
-        )
+        company_name = info.get("longName") or info.get("shortName") or info.get("displayName") or symbol
         if current_price is None:
             current_price = info.get("currentPrice", 0)
         if shares_outstanding is None:
@@ -483,6 +508,7 @@ def get_market_and_financial_data(symbol: str, chart_period: str) -> dict:
         "cashflow": cashflow,
         "balance_sheet": balance_sheet,
         "hist_chart": hist_chart,
+        "info": info,
     }
 
 
@@ -616,7 +642,6 @@ def build_forecast_model(
                 "CapEx ($M)": capex / 1_000_000,
                 "Change in NWC ($M)": change_nwc / 1_000_000,
                 "FCF ($M)": fcf / 1_000_000,
-                "EBIT Margin (%)": ebit_margin * 100,
             }
         )
 
@@ -718,7 +743,7 @@ with st.sidebar:
     st.markdown(
         """
         <div class="sidebar-brand">
-            <div class="sidebar-ng-script">ng</div>
+            <div class="sidebar-ng">NG</div>
             <div style="font-weight:800; font-size:18px;">Valuation Lab</div>
             <div class="small-note">by Nishtha Garg</div>
         </div>
@@ -742,23 +767,28 @@ with st.sidebar:
     chart_label = st.selectbox("Stock Price Chart Range", list(chart_range_map.keys()), index=3)
     chart_period = chart_range_map[chart_label]
 
-    tax_rate = st.number_input("Tax Rate (%)", value=21.0, step=0.5) / 100
-    wacc = st.number_input("WACC (%)", value=9.0, step=0.5) / 100
-    terminal_growth = st.number_input("Terminal Growth Rate (%)", value=2.5, step=0.5) / 100
-    projection_years = int(st.number_input("Projection Years", min_value=3, max_value=10, value=5, step=1))
-    net_debt = st.number_input("Net Debt ($)", value=0.0, step=1000000.0)
-
     st.markdown("### Revenue Assumptions")
-    use_historical_revenue_growth = st.checkbox("Use historical company revenue growth automatically", value=True)
+    use_historical_revenue_growth = st.checkbox("Use historical 3-year revenue CAGR automatically", value=True)
     revenue_growth_input_percent = st.number_input("Revenue Growth Rate (%)", value=5.0, step=0.5)
 
-    st.markdown("### DCF Assumptions")
+    st.markdown("### Operating Assumptions")
     use_latest_company_assumptions = st.checkbox("Use latest company assumptions automatically", value=True)
-
     ebit_margin_input_percent = st.number_input("EBIT Margin (%)", value=18.0, step=0.5)
     da_percent_input_percent = st.number_input("D&A (% of Revenue)", value=3.0, step=0.5)
     capex_percent_input_percent = st.number_input("CapEx (% of Revenue)", value=4.0, step=0.5)
     nwc_percent_input_percent = st.number_input("Change in NWC (% of Revenue)", value=1.0, step=0.5)
+
+    st.markdown("### Valuation Assumptions")
+    use_estimated_valuation_assumptions = st.checkbox("Use estimated/default valuation assumptions automatically", value=True)
+    tax_rate_input_percent = st.number_input("Tax Rate (%)", value=21.0, step=0.5)
+    wacc_input_percent = st.number_input("WACC (%)", value=9.0, step=0.5)
+    terminal_growth_input_percent = st.number_input("Terminal Growth Rate (%)", value=2.5, step=0.5)
+    net_debt_input = st.number_input("Net Debt ($)", value=0.0, step=1000000.0)
+    projection_years = int(st.number_input("Projection Years", min_value=3, max_value=10, value=5, step=1))
+
+    st.markdown("### Capital Structure")
+    use_market_shares_outstanding = st.checkbox("Use latest shares outstanding automatically", value=True)
+    shares_override = st.number_input("Shares Outstanding Override", value=1000000000.0, step=1000000.0)
 
     manual_peers = st.text_input("Override Peer Tickers", "")
 
@@ -766,16 +796,7 @@ with st.sidebar:
 
     page = st.radio(
         "Navigation",
-        [
-            "Home",
-            "Overview",
-            "Market Data",
-            "Forecast Model",
-            "DCF Valuation",
-            "Comps Valuation",
-            "Sensitivity",
-            "Export",
-        ],
+        ["Home", "Overview", "Market Data", "Forecast Model", "DCF Valuation", "Comps Valuation", "Sensitivity", "Export"],
         index=0,
     )
 
@@ -785,7 +806,7 @@ with st.sidebar:
 # Home page
 # -----------------------------
 if page == "Home" and not run_button:
-    st.markdown('<div class="section-label">Welcome</div>', unsafe_allow_html=True)
+    st.markdown('<div class="section-label">Welcome!</div>', unsafe_allow_html=True)
     st.markdown(
         """
         <div class="home-card">
@@ -794,16 +815,19 @@ if page == "Home" and not run_button:
                 I built <b>Valuation Lab</b> to make valuation and financial modeling more interactive, intuitive, and accessible.
                 I hope you enjoy exploring the app.
             </div>
-
-            <div class="link-row">
-                <a class="link-btn" href="https://www.linkedin.com/in/nishthagarg19" target="_blank">Connect on LinkedIn</a>
-                <a class="link-btn" href="mailto:ninagarg19@gmail.com">Email Me</a>
-                <a class="link-btn" href="https://gargnishtha1907.wixsite.com/my-site-1" target="_blank">View Portfolio</a>
-            </div>
         </div>
         """,
         unsafe_allow_html=True,
     )
+
+    c1, c2, c3 = st.columns(3)
+    with c1:
+        st.link_button("Connect on LinkedIn", "https://www.linkedin.com/in/nishthagarg19", use_container_width=True)
+    with c2:
+        st.link_button("Email Me", "mailto:ninagarg19@gmail.com", use_container_width=True)
+    with c3:
+        st.link_button("View Portfolio", "https://gargnishtha1907.wixsite.com/my-site-1", use_container_width=True)
+
     st.info("Use the left sidebar to enter a company and click **Run Model** when you're ready.")
 elif not run_button:
     st.info("Enter a company in the sidebar and click **Run Model** to load the platform.")
@@ -815,7 +839,7 @@ else:
         data = get_market_and_financial_data(resolved_symbol, chart_period)
         company_name = data["company_name"]
         current_price = data["current_price"] or 0
-        shares_outstanding = data["shares_outstanding"]
+        shares_outstanding_market = data["shares_outstanding"]
         market_cap = data["market_cap"]
         trailing_pe = data["trailing_pe"]
         forward_pe = data["forward_pe"]
@@ -825,18 +849,22 @@ else:
         industry = data["industry"]
         financials = data["financials"]
         cashflow = data["cashflow"]
+        balance_sheet = data["balance_sheet"]
         hist_chart = data["hist_chart"]
+        info = data["info"]
 
-        if shares_outstanding is None or shares_outstanding == 0:
-            raise ValueError("Could not retrieve shares outstanding for this company.")
+        historical_revenue_cagr = calculate_revenue_cagr(financials)
+        auto_tax_rate = estimate_tax_rate(financials)
+        auto_net_debt = estimate_net_debt(balance_sheet)
+        auto_terminal_growth = 0.025
+        auto_wacc = estimate_wacc(info, financials, balance_sheet, auto_tax_rate if auto_tax_rate is not None else 0.21)
+
+        revenue_growth_used = historical_revenue_cagr if (use_historical_revenue_growth and historical_revenue_cagr is not None) else revenue_growth_input_percent / 100
 
         revenue = financials.loc["Total Revenue"].iloc[0]
         operating_income = financials.loc["Operating Income"].iloc[0]
         depreciation = cashflow.loc["Depreciation And Amortization"].iloc[0]
         capex = abs(cashflow.loc["Capital Expenditure"].iloc[0])
-
-        historical_revenue_cagr = calculate_revenue_cagr(financials)
-        revenue_growth_used = historical_revenue_cagr if (use_historical_revenue_growth and historical_revenue_cagr is not None) else revenue_growth_input_percent / 100
 
         auto_ebit_margin = operating_income / revenue
         auto_da_percent = depreciation / revenue
@@ -848,18 +876,28 @@ else:
         capex_percent_used = auto_capex_percent if use_latest_company_assumptions else capex_percent_input_percent / 100
         nwc_percent_used = auto_nwc_percent if use_latest_company_assumptions else nwc_percent_input_percent / 100
 
+        tax_rate_used = auto_tax_rate if (use_estimated_valuation_assumptions and auto_tax_rate is not None) else tax_rate_input_percent / 100
+        wacc_used = auto_wacc if use_estimated_valuation_assumptions else wacc_input_percent / 100
+        terminal_growth_used = auto_terminal_growth if use_estimated_valuation_assumptions else terminal_growth_input_percent / 100
+        net_debt_used = auto_net_debt if (use_estimated_valuation_assumptions and auto_net_debt is not None) else net_debt_input
+
+        shares_outstanding_used = shares_outstanding_market if (use_market_shares_outstanding and shares_outstanding_market not in (None, 0)) else shares_override
+
+        if shares_outstanding_used is None or shares_outstanding_used == 0:
+            raise ValueError("Could not retrieve shares outstanding for this company.")
+
         base_results = run_dcf(
             base_revenue=revenue,
             ebit_margin=ebit_margin_used,
             da_percent=da_percent_used,
             capex_percent=capex_percent_used,
             nwc_percent=nwc_percent_used,
-            shares_outstanding=shares_outstanding,
+            shares_outstanding=shares_outstanding_used,
             growth_rate=revenue_growth_used,
-            tax_rate=tax_rate,
-            wacc=wacc,
-            terminal_growth=terminal_growth,
-            net_debt=net_debt,
+            tax_rate=tax_rate_used,
+            wacc=wacc_used,
+            terminal_growth=terminal_growth_used,
+            net_debt=net_debt_used,
             projection_years=projection_years,
         )
 
@@ -869,7 +907,7 @@ else:
             da_percent=da_percent_used,
             capex_percent=capex_percent_used,
             nwc_percent=nwc_percent_used,
-            tax_rate=tax_rate,
+            tax_rate=tax_rate_used,
             growth_rate=revenue_growth_used,
             projection_years=projection_years,
         )
@@ -905,9 +943,9 @@ else:
         forward_comps_value = avg_forward_pe * forward_eps if avg_forward_pe and forward_eps else None
 
         scenario_inputs = {
-            "Bear": {"growth": max(revenue_growth_used - 0.02, 0), "wacc": wacc + 0.01, "tg": max(terminal_growth - 0.005, 0)},
-            "Base": {"growth": revenue_growth_used, "wacc": wacc, "tg": terminal_growth},
-            "Bull": {"growth": revenue_growth_used + 0.02, "wacc": max(wacc - 0.01, 0.01), "tg": terminal_growth + 0.005},
+            "Bear": {"growth": max(revenue_growth_used - 0.02, 0), "wacc": wacc_used + 0.01, "tg": max(terminal_growth_used - 0.005, 0)},
+            "Base": {"growth": revenue_growth_used, "wacc": wacc_used, "tg": terminal_growth_used},
+            "Bull": {"growth": revenue_growth_used + 0.02, "wacc": max(wacc_used - 0.01, 0.01), "tg": terminal_growth_used + 0.005},
         }
 
         scenario_rows = []
@@ -919,12 +957,12 @@ else:
                     da_percent=da_percent_used,
                     capex_percent=capex_percent_used,
                     nwc_percent=nwc_percent_used,
-                    shares_outstanding=shares_outstanding,
+                    shares_outstanding=shares_outstanding_used,
                     growth_rate=vals["growth"],
-                    tax_rate=tax_rate,
+                    tax_rate=tax_rate_used,
                     wacc=vals["wacc"],
                     terminal_growth=vals["tg"],
-                    net_debt=net_debt,
+                    net_debt=net_debt_used,
                     projection_years=projection_years,
                 )
                 scenario_rows.append(
@@ -966,12 +1004,12 @@ else:
                         da_percent=da_percent_used,
                         capex_percent=capex_percent_used,
                         nwc_percent=nwc_percent_used,
-                        shares_outstanding=shares_outstanding,
+                        shares_outstanding=shares_outstanding_used,
                         growth_rate=revenue_growth_used,
-                        tax_rate=tax_rate,
+                        tax_rate=tax_rate_used,
                         wacc=w,
                         terminal_growth=tg,
-                        net_debt=net_debt,
+                        net_debt=net_debt_used,
                         projection_years=projection_years,
                     )
                     row[f"WACC {w*100:.2f}%"] = format_dollar_short(sens_result["implied_price"])
@@ -998,12 +1036,15 @@ else:
                     "Sector": sector,
                     "Industry": industry,
                     "Revenue Growth %": revenue_growth_used * 100,
-                    "WACC %": wacc * 100,
-                    "Terminal Growth %": terminal_growth * 100,
+                    "Tax Rate %": tax_rate_used * 100,
+                    "WACC %": wacc_used * 100,
+                    "Terminal Growth %": terminal_growth_used * 100,
                     "EBIT Margin %": ebit_margin_used * 100,
                     "D&A %": da_percent_used * 100,
                     "CapEx %": capex_percent_used * 100,
                     "NWC %": nwc_percent_used * 100,
+                    "Net Debt": net_debt_used,
+                    "Shares Outstanding": shares_outstanding_used,
                 }
             ]
         )
@@ -1033,7 +1074,7 @@ else:
             st.caption(f"Historical 3-Year Revenue CAGR: {historical_revenue_cagr*100:.2f}%")
 
         if page == "Home":
-            st.markdown('<div class="section-label">Welcome</div>', unsafe_allow_html=True)
+            st.markdown('<div class="section-label">Welcome!</div>', unsafe_allow_html=True)
             st.markdown(
                 """
                 <div class="home-card">
@@ -1042,26 +1083,18 @@ else:
                         I built <b>Valuation Lab</b> to make valuation and financial modeling more interactive, intuitive, and accessible.
                         I hope you enjoy exploring the app.
                     </div>
-
-                    <div class="link-row">
-                        <a class="link-btn" href="https://www.linkedin.com/in/nishthagarg19" target="_blank">Connect on LinkedIn</a>
-                        <a class="link-btn" href="mailto:ninagarg19@gmail.com">Email Me</a>
-                        <a class="link-btn" href="https://gargnishtha1907.wixsite.com/my-site-1" target="_blank">View Portfolio</a>
-                    </div>
                 </div>
                 """,
                 unsafe_allow_html=True,
             )
 
-            overview_cols = st.columns(4)
-            with overview_cols[0]:
-                st.markdown(f"""<div class="metric-card"><div class="metric-label">Current Price</div><div class="metric-value">{format_dollar_short(current_price)}</div></div>""", unsafe_allow_html=True)
-            with overview_cols[1]:
-                st.markdown(f"""<div class="metric-card"><div class="metric-label">Implied Price</div><div class="metric-value">{format_dollar_short(implied_price)}</div></div>""", unsafe_allow_html=True)
-            with overview_cols[2]:
-                st.markdown(f"""<div class="metric-card"><div class="metric-label">Upside / Downside</div><div class="metric-value">{format_percent(upside_downside)}</div></div>""", unsafe_allow_html=True)
-            with overview_cols[3]:
-                st.markdown(f"""<div class="metric-card"><div class="metric-label">Recommendation</div><div class="metric-value" style="color:{rec_color};">{recommendation}</div></div>""", unsafe_allow_html=True)
+            c1, c2, c3 = st.columns(3)
+            with c1:
+                st.link_button("Connect on LinkedIn", "https://www.linkedin.com/in/nishthagarg19", use_container_width=True)
+            with c2:
+                st.link_button("Email Me", "mailto:ninagarg19@gmail.com", use_container_width=True)
+            with c3:
+                st.link_button("View Portfolio", "https://gargnishtha1907.wixsite.com/my-site-1", use_container_width=True)
 
         elif page == "Overview":
             st.markdown('<div class="section-label">Overview</div>', unsafe_allow_html=True)
@@ -1087,7 +1120,7 @@ else:
                         Sector / Industry: <b>{sector or 'N/A'}</b> / <b>{industry or 'N/A'}</b>
                     </div>
                     <div style="margin-top:12px; color:#AAB0B6; font-size:14px;">
-                        Assumptions Used: Revenue Growth {revenue_growth_used*100:.1f}% | EBIT Margin {ebit_margin_used*100:.1f}% | D&A {da_percent_used*100:.1f}% | CapEx {capex_percent_used*100:.1f}% | NWC {nwc_percent_used*100:.1f}%
+                        Assumptions Used: Revenue Growth {revenue_growth_used*100:.1f}% | Tax Rate {tax_rate_used*100:.1f}% | WACC {wacc_used*100:.1f}% | Terminal Growth {terminal_growth_used*100:.1f}%
                     </div>
                 </div>
                 """,
@@ -1118,16 +1151,7 @@ else:
 
         elif page == "Forecast Model":
             st.markdown('<div class="section-label">Forecast Model</div>', unsafe_allow_html=True)
-
-            st.plotly_chart(
-                plot_driver_chart(
-                    ebit_margin_used,
-                    da_percent_used,
-                    capex_percent_used,
-                    nwc_percent_used,
-                ),
-                use_container_width=True,
-            )
+            st.plotly_chart(plot_driver_chart(ebit_margin_used, da_percent_used, capex_percent_used, nwc_percent_used), use_container_width=True)
 
             income_display = income_statement_df.copy()
             for col in income_display.columns:
@@ -1145,38 +1169,6 @@ else:
             st.markdown('<div class="section-label">Forecast Cash Flow Build</div>', unsafe_allow_html=True)
             st.markdown(html_table(cashflow_display), unsafe_allow_html=True)
 
-            rev_fcf_fig = go.Figure()
-            rev_fcf_fig.add_trace(
-                go.Scatter(
-                    x=forecast_df["Year"],
-                    y=forecast_df["Revenue ($M)"],
-                    mode="lines+markers",
-                    name="Revenue ($M)",
-                    line=dict(color="#38BDF8", width=4),
-                )
-            )
-            rev_fcf_fig.add_trace(
-                go.Scatter(
-                    x=forecast_df["Year"],
-                    y=forecast_df["FCF ($M)"],
-                    mode="lines+markers",
-                    name="FCF ($M)",
-                    line=dict(color="#22C55E", width=4),
-                )
-            )
-            rev_fcf_fig.update_layout(
-                title="Revenue vs FCF Forecast",
-                template="plotly_dark",
-                paper_bgcolor="rgba(0,0,0,0)",
-                plot_bgcolor="#111827",
-                font=dict(color="#F9FAFB"),
-                margin=dict(l=20, r=20, t=50, b=20),
-                xaxis=dict(title="Year", gridcolor="#243041"),
-                yaxis=dict(title="$M", gridcolor="#243041"),
-                height=380,
-            )
-            st.plotly_chart(rev_fcf_fig, use_container_width=True)
-
         elif page == "DCF Valuation":
             st.markdown('<div class="section-label">DCF Valuation</div>', unsafe_allow_html=True)
 
@@ -1190,13 +1182,29 @@ else:
 
             assumptions_df = pd.DataFrame(
                 {
-                    "Assumption": ["Revenue Growth", "EBIT Margin", "D&A %", "CapEx %", "NWC %"],
+                    "Assumption": [
+                        "Revenue Growth",
+                        "EBIT Margin",
+                        "D&A %",
+                        "CapEx %",
+                        "NWC %",
+                        "Tax Rate",
+                        "WACC",
+                        "Terminal Growth",
+                        "Net Debt",
+                        "Shares Outstanding",
+                    ],
                     "Value": [
                         f"{revenue_growth_used*100:.1f}%",
                         f"{ebit_margin_used*100:.1f}%",
                         f"{da_percent_used*100:.1f}%",
                         f"{capex_percent_used*100:.1f}%",
                         f"{nwc_percent_used*100:.1f}%",
+                        f"{tax_rate_used*100:.1f}%",
+                        f"{wacc_used*100:.1f}%",
+                        f"{terminal_growth_used*100:.1f}%",
+                        format_dollar_short(net_debt_used),
+                        f"{shares_outstanding_used:,.0f}",
                     ],
                 }
             )
@@ -1256,26 +1264,6 @@ else:
 
         elif page == "Export":
             st.markdown('<div class="section-label">Export</div>', unsafe_allow_html=True)
-
-            st.markdown(
-                """
-                <div class="summary-box">
-                    <div class="summary-title">Download Model</div>
-                    <div style="line-height:1.7;">
-                        Export the current valuation setup into Excel, including:
-                        <br>• Summary
-                        <br>• DCF Projections
-                        <br>• Scenario Analysis
-                        <br>• Sensitivity Analysis
-                        <br>• Peer Comparison
-                        <br>• Forecast Income Statement
-                        <br>• Forecast Cash Flow Build
-                    </div>
-                </div>
-                """,
-                unsafe_allow_html=True,
-            )
-
             st.download_button(
                 label="Download Excel Model",
                 data=excel_bytes,
