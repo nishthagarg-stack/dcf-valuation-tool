@@ -988,6 +988,14 @@ def plot_stock_vs_peers_chart(df: pd.DataFrame):
         margin=dict(l=20, r=20, t=50, b=20),
         xaxis_title="Date",
         yaxis_title="Normalized Price",
+        legend=dict(
+            font=dict(size=14, color="white"),
+            orientation="h",
+            x=0,
+            y=1.12,
+            bgcolor="rgba(0,0,0,0)",
+            bordercolor="rgba(0,0,0,0)"
+        ),
         height=420,
     )
     return fig
