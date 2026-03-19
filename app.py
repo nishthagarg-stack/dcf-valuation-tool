@@ -855,7 +855,7 @@ def plot_price_chart(hist_df: pd.DataFrame, company_name: str, chart_label: str)
     )
     fig.update_layout(
         title=dict(
-            text=f"{company_name} Price Chart({chart_label}),
+            text=f"{company_name} Price Chart({chart_label})",
             font=dict(size=20, color="#FACC15")
         ),
         template="plotly_dark",
