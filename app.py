@@ -924,7 +924,10 @@ def plot_income_chart(forecast_df: pd.DataFrame):
     fig.add_trace(go.Scatter(x=forecast_df["Year"], y=forecast_df["Revenue ($M)"], mode="lines+markers", name="Revenue ($M)", line=dict(color="#38BDF8", width=4)))
     fig.add_trace(go.Scatter(x=forecast_df["Year"], y=forecast_df["EBIT ($M)"], mode="lines+markers", name="EBIT ($M)", line=dict(color="#F59E0B", width=4)))
     fig.update_layout(
-        title="Revenue vs EBIT Forecast",
+        title=title=dict(
+            text="Revenue vs EBIT Forecast",
+            font=dict(size=20, color="#D4AF37")
+    ),
         template="plotly_dark",
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="#111827",
