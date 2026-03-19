@@ -864,7 +864,7 @@ def plot_price_chart(hist_df: pd.DataFrame, company_name: str, chart_label: str)
         font=dict(color="#F9FAFB"),
         margin=dict(l=20, r=20, t=50, b=20),
         xaxis=dict(title="Date", gridcolor="#243041"),
-        yaxis=dict(title="Price (USD)", gridcolor="#243041"),
+        yaxis=dict(title="Share Price (USD)", gridcolor="#243041"),
         height=380,
     )
     return fig
@@ -978,7 +978,7 @@ def plot_stock_vs_peers_chart(df: pd.DataFrame):
 
     fig.update_layout(
         title=dict(
-            text="Stock vs Peers Performance (Base 100 = Start Date)",
+            text="Stock vs Peers Performance (Indexed to 100 at Start Date)",
             font=dict(size=20, color="#D4AF37")
         ),
         template="plotly_dark",
@@ -987,7 +987,7 @@ def plot_stock_vs_peers_chart(df: pd.DataFrame):
         font=dict(color="#F9FAFB"),
         margin=dict(l=20, r=20, t=50, b=20),
         xaxis_title="Date",
-        yaxis_title="Normalized Price (Base=100)",
+        yaxis_title="Normalized Price (Base = 100)",
         legend=dict(
             font=dict(size=14, color="white"),
             orientation="h",
