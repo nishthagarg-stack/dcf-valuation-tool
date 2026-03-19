@@ -960,7 +960,10 @@ def plot_cashflow_chart(forecast_df: pd.DataFrame):
     fig.add_trace(go.Scatter(x=forecast_df["Year"], y=forecast_df["FCF ($M)"], mode="lines+markers", name="FCF ($M)", line=dict(color="#22C55E", width=4)))
     fig.add_trace(go.Bar(x=forecast_df["Year"], y=forecast_df["CapEx ($M)"], name="CapEx ($M)", marker_color="#8B5CF6", opacity=0.75))
     fig.update_layout(
-        title="Free Cash Flow Forecast",
+       title=dict(
+            text="Free Cash Flow Forecast",
+            font=dict(size=20, color="#D4AF37")
+    ),
         template="plotly_dark",
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="#111827",
@@ -968,6 +971,9 @@ def plot_cashflow_chart(forecast_df: pd.DataFrame):
         margin=dict(l=20, r=20, t=50, b=20),
         xaxis_title="Year",
         yaxis_title="$M",
+        legend=dict(
+            font=dict(size=14, color="#FFFFFF")
+        ),
         height=380,
         barmode="group",
     )
