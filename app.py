@@ -17,7 +17,6 @@ st.set_page_config(
     layout="wide",
 )
 
-
 # -----------------------------
 # State init
 # -----------------------------
@@ -27,13 +26,17 @@ DEFAULT_STATE = {
     "revenue_growth_pct": 5.0,
     "operating_auto": True,
     "ebit_margin_pct": 18.0,
+    "da_auto": True,
     "da_pct": 3.0,
+    "capex_auto": True,
     "capex_pct": 4.0,
+    "nwc_auto": True,
     "nwc_pct": 1.0,
     "valuation_auto": True,
     "tax_rate_pct": 21.0,
     "wacc_pct": 9.0,
     "terminal_growth_pct": 2.5,
+    "net_debt_auto": True,
     "net_debt": 0.0,
     "projection_years": 5,
     "shares_auto": True,
@@ -188,11 +191,11 @@ st.markdown(
 
     .stTextInput > div > div > input,
     .stNumberInput input,
-    .stSelectbox > div > div,
-    .stCheckbox label {
+    .stSelectbox > div > div {
         background-color: #141B2D !important;
         color: #FFFFFF !important;
         border-radius: 12px !important;
+        border: 1px solid #25304A !important;
     }
 
     .stButton > button,
@@ -258,7 +261,6 @@ st.markdown(
     unsafe_allow_html=True,
 )
 
-
 # -----------------------------
 # Branding
 # -----------------------------
@@ -272,7 +274,6 @@ st.markdown(
     """,
     unsafe_allow_html=True,
 )
-
 
 # -----------------------------
 # Helpers
@@ -317,7 +318,7 @@ def html_table(df: pd.DataFrame) -> str:
 
 def is_probable_ticker(query: str) -> bool:
     q = query.strip().upper()
-    return bool(re.fullmatch(r"[A-Z.\\-]{1,6}", q))
+    return bool(re.fullmatch(r"[A-Z.\-]{1,6}", q))
 
 
 def normalize_symbol(text: str) -> str:
@@ -668,6 +669,7 @@ def build_forecast_model(
                 "Year": year,
                 "Revenue ($M)": revenue_proj / 1_000_000,
                 "EBIT ($M)": ebit / 1_000_000,
+                "Taxes ($M)": taxes / 1_000_000,
                 "NOPAT ($M)": nopat / 1_000_000,
                 "D&A ($M)": da / 1_000_000,
                 "CapEx ($M)": capex / 1_000_000,
@@ -677,15 +679,12 @@ def build_forecast_model(
         )
 
     forecast_df = pd.DataFrame(rows)
-    income_df = forecast_df[["Year", "Revenue ($M)", "EBIT ($M)", "NOPAT ($M)"]].copy()
+    income_df = forecast_df[["Year", "Revenue ($M)", "EBIT ($M)", "Taxes ($M)", "NOPAT ($M)"]].copy()
     cashflow_df = forecast_df[["Year", "NOPAT ($M)", "D&A ($M)", "CapEx ($M)", "Change in NWC ($M)", "FCF ($M)"]].copy()
     return forecast_df, income_df, cashflow_df
 
 
-def build_balance_sheet_lite(
-    balance_sheet: pd.DataFrame,
-    forecast_df: pd.DataFrame,
-):
+def build_balance_sheet_lite(balance_sheet: pd.DataFrame, forecast_df: pd.DataFrame):
     starting_cash = get_row_value(
         balance_sheet,
         ["Cash And Cash Equivalents", "Cash Cash Equivalents And Short Term Investments", "Cash", "Cash And Short Term Investments"],
@@ -753,9 +752,9 @@ def build_excel_file(
         scenario_df.to_excel(writer, sheet_name="Scenarios", index=False)
         sensitivity_df.to_excel(writer, sheet_name="Sensitivity", index=False)
         peers_df.to_excel(writer, sheet_name="Peers", index=False)
-        income_df.to_excel(writer, sheet_name="Forecast Income", index=False)
-        cashflow_df.to_excel(writer, sheet_name="Forecast Cash Flow", index=False)
-        balance_df.to_excel(writer, sheet_name="Balance Sheet Lite", index=False)
+        income_df.to_excel(writer, sheet_name="Income Statement Forecast", index=False)
+        cashflow_df.to_excel(writer, sheet_name="Cash Flow Forecast", index=False)
+        balance_df.to_excel(writer, sheet_name="Balance Sheet Forecast", index=False)
     return output.getvalue()
 
 
@@ -816,13 +815,12 @@ def plot_peer_pe_chart(peer_df: pd.DataFrame):
     return fig
 
 
-def plot_forecast_chart(forecast_df: pd.DataFrame):
+def plot_income_chart(forecast_df: pd.DataFrame):
     fig = go.Figure()
     fig.add_trace(go.Scatter(x=forecast_df["Year"], y=forecast_df["Revenue ($M)"], mode="lines+markers", name="Revenue ($M)", line=dict(color="#38BDF8", width=4)))
     fig.add_trace(go.Scatter(x=forecast_df["Year"], y=forecast_df["EBIT ($M)"], mode="lines+markers", name="EBIT ($M)", line=dict(color="#F59E0B", width=4)))
-    fig.add_trace(go.Scatter(x=forecast_df["Year"], y=forecast_df["FCF ($M)"], mode="lines+markers", name="FCF ($M)", line=dict(color="#22C55E", width=4)))
     fig.update_layout(
-        title="Forecast Trend",
+        title="Revenue vs EBIT Forecast",
         template="plotly_dark",
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="#111827",
@@ -831,6 +829,25 @@ def plot_forecast_chart(forecast_df: pd.DataFrame):
         xaxis_title="Year",
         yaxis_title="$M",
         height=380,
+    )
+    return fig
+
+
+def plot_cashflow_chart(forecast_df: pd.DataFrame):
+    fig = go.Figure()
+    fig.add_trace(go.Scatter(x=forecast_df["Year"], y=forecast_df["FCF ($M)"], mode="lines+markers", name="FCF ($M)", line=dict(color="#22C55E", width=4)))
+    fig.add_trace(go.Bar(x=forecast_df["Year"], y=forecast_df["CapEx ($M)"], name="CapEx ($M)", marker_color="#8B5CF6", opacity=0.75))
+    fig.update_layout(
+        title="Free Cash Flow Forecast",
+        template="plotly_dark",
+        paper_bgcolor="rgba(0,0,0,0)",
+        plot_bgcolor="#111827",
+        font=dict(color="#F9FAFB"),
+        margin=dict(l=20, r=20, t=50, b=20),
+        xaxis_title="Year",
+        yaxis_title="$M",
+        height=380,
+        barmode="group",
     )
     return fig
 
@@ -890,10 +907,10 @@ with st.sidebar:
         [
             "Home",
             "Overview",
-            "Assumptions",
             "Market Data",
-            "Forecast Model",
-            "Balance Sheet",
+            "Income Statement Forecast",
+            "Balance Sheet Forecast",
+            "Cash Flow Statement Forecast",
             "DCF Valuation",
             "Comps Valuation",
             "Sensitivity",
@@ -975,143 +992,190 @@ else:
         auto_nwc_percent = 0.0
 
         # -----------------------------
-        # Assumptions page inputs
+        # Inputs live on their pages
         # -----------------------------
-        if page == "Assumptions":
-            st.markdown('<div class="section-label">Assumptions</div>', unsafe_allow_html=True)
+        if page == "Income Statement Forecast":
+            st.markdown('<div class="section-label">Income Statement Assumptions</div>', unsafe_allow_html=True)
 
-            st.markdown("### Revenue Assumptions")
-            st.session_state["revenue_auto"] = st.checkbox(
-                "Use historical 3-year revenue CAGR automatically",
-                value=st.session_state["revenue_auto"],
-            )
-            st.session_state["revenue_growth_pct"] = st.number_input(
-                "Revenue Growth Rate (%)",
-                value=float(st.session_state["revenue_growth_pct"]),
-                step=0.5,
-            )
-            if historical_revenue_cagr is not None:
-                st.caption(f"Historical 3-Year Revenue CAGR: {historical_revenue_cagr*100:.2f}%")
-
-            st.markdown("### Operating Assumptions")
-            st.session_state["operating_auto"] = st.checkbox(
-                "Use latest company assumptions automatically",
-                value=st.session_state["operating_auto"],
-            )
-            st.session_state["ebit_margin_pct"] = st.number_input(
-                "EBIT Margin (%)",
-                value=float(st.session_state["ebit_margin_pct"]),
-                step=0.5,
-            )
-            st.session_state["da_pct"] = st.number_input(
-                "D&A (% of Revenue)",
-                value=float(st.session_state["da_pct"]),
-                step=0.5,
-            )
-            st.session_state["capex_pct"] = st.number_input(
-                "CapEx (% of Revenue)",
-                value=float(st.session_state["capex_pct"]),
-                step=0.5,
-            )
-            st.session_state["nwc_pct"] = st.number_input(
-                "Change in NWC (% of Revenue)",
-                value=float(st.session_state["nwc_pct"]),
-                step=0.5,
-            )
-
-            st.markdown("### Valuation Assumptions")
-            st.session_state["valuation_auto"] = st.checkbox(
-                "Use estimated/default valuation assumptions automatically",
-                value=st.session_state["valuation_auto"],
-            )
-            st.session_state["tax_rate_pct"] = st.number_input(
-                "Tax Rate (%)",
-                value=float(st.session_state["tax_rate_pct"]),
-                step=0.5,
-            )
-            st.session_state["wacc_pct"] = st.number_input(
-                "WACC (%)",
-                value=float(st.session_state["wacc_pct"]),
-                step=0.5,
-            )
-            st.session_state["terminal_growth_pct"] = st.number_input(
-                "Terminal Growth Rate (%)",
-                value=float(st.session_state["terminal_growth_pct"]),
-                step=0.5,
-            )
-            st.session_state["net_debt"] = st.number_input(
-                "Net Debt ($)",
-                value=float(st.session_state["net_debt"]),
-                step=1000000.0,
-            )
-            st.session_state["projection_years"] = int(
-                st.number_input(
-                    "Projection Years",
-                    min_value=3,
-                    max_value=10,
-                    value=int(st.session_state["projection_years"]),
-                    step=1,
+            c1, c2 = st.columns(2)
+            with c1:
+                st.session_state["revenue_auto"] = st.checkbox(
+                    "Use historical 3-year revenue CAGR automatically",
+                    value=st.session_state["revenue_auto"],
                 )
-            )
+                st.session_state["revenue_growth_pct"] = st.number_input(
+                    "Revenue Growth Rate (%)",
+                    value=float(st.session_state["revenue_growth_pct"]),
+                    step=0.5,
+                )
+            with c2:
+                st.session_state["operating_auto"] = st.checkbox(
+                    "Use latest operating assumptions automatically",
+                    value=st.session_state["operating_auto"],
+                )
+                st.session_state["ebit_margin_pct"] = st.number_input(
+                    "EBIT Margin (%)",
+                    value=float(st.session_state["ebit_margin_pct"]),
+                    step=0.5,
+                )
+                st.session_state["tax_rate_pct"] = st.number_input(
+                    "Tax Rate (%)",
+                    value=float(st.session_state["tax_rate_pct"]),
+                    step=0.5,
+                )
 
-            st.markdown("### Capital Structure")
-            st.session_state["shares_auto"] = st.checkbox(
-                "Use latest shares outstanding automatically",
-                value=st.session_state["shares_auto"],
-            )
-            st.session_state["shares_outstanding"] = st.number_input(
-                "Shares Outstanding",
-                value=float(st.session_state["shares_outstanding"]),
-                step=1000000.0,
-            )
-            st.session_state["manual_peers"] = st.text_input(
-                "Custom Peer Tickers (comma-separated)",
-                value=st.session_state["manual_peers"],
-            )
-
-            auto_summary = pd.DataFrame(
+            auto_table = pd.DataFrame(
                 {
-                    "Automatic Input": [
-                        "Revenue Growth",
-                        "EBIT Margin",
-                        "D&A %",
-                        "CapEx %",
-                        "NWC %",
-                        "Tax Rate",
-                        "WACC",
-                        "Terminal Growth",
-                        "Net Debt",
-                        "Shares Outstanding",
-                    ],
+                    "Automatic Input": ["Revenue Growth", "EBIT Margin", "Tax Rate"],
                     "Current Auto Value": [
                         f"{historical_revenue_cagr*100:.2f}%" if historical_revenue_cagr is not None else "N/A",
                         f"{auto_ebit_margin*100:.2f}%",
-                        f"{auto_da_percent*100:.2f}%",
-                        f"{auto_capex_percent*100:.2f}%",
-                        f"{auto_nwc_percent*100:.2f}%",
                         f"{auto_tax_rate*100:.2f}%" if auto_tax_rate is not None else "N/A",
-                        f"{auto_wacc*100:.2f}%",
-                        f"{auto_terminal_growth*100:.2f}%",
+                    ],
+                }
+            )
+            st.markdown(html_table(auto_table), unsafe_allow_html=True)
+
+        elif page == "Balance Sheet Forecast":
+            st.markdown('<div class="section-label">Balance Sheet Assumptions</div>', unsafe_allow_html=True)
+
+            c1, c2 = st.columns(2)
+            with c1:
+                st.session_state["nwc_auto"] = st.checkbox(
+                    "Use latest working capital assumption automatically",
+                    value=st.session_state["nwc_auto"],
+                )
+                st.session_state["nwc_pct"] = st.number_input(
+                    "Change in NWC (% of Revenue)",
+                    value=float(st.session_state["nwc_pct"]),
+                    step=0.5,
+                )
+                st.session_state["net_debt_auto"] = st.checkbox(
+                    "Use latest net debt automatically",
+                    value=st.session_state["net_debt_auto"],
+                )
+                st.session_state["net_debt"] = st.number_input(
+                    "Net Debt ($)",
+                    value=float(st.session_state["net_debt"]),
+                    step=1000000.0,
+                )
+            with c2:
+                st.session_state["shares_auto"] = st.checkbox(
+                    "Use latest shares outstanding automatically",
+                    value=st.session_state["shares_auto"],
+                )
+                st.session_state["shares_outstanding"] = st.number_input(
+                    "Shares Outstanding",
+                    value=float(st.session_state["shares_outstanding"]),
+                    step=1000000.0,
+                )
+
+            auto_table = pd.DataFrame(
+                {
+                    "Automatic Input": ["NWC %", "Net Debt", "Shares Outstanding"],
+                    "Current Auto Value": [
+                        f"{auto_nwc_percent*100:.2f}%",
                         format_dollar_short(auto_net_debt) if auto_net_debt is not None else "N/A",
                         f"{shares_outstanding_market:,.0f}" if shares_outstanding_market not in (None, 0) else "N/A",
                     ],
                 }
             )
-            st.markdown(html_table(auto_summary), unsafe_allow_html=True)
+            st.markdown(html_table(auto_table), unsafe_allow_html=True)
+
+        elif page == "Cash Flow Statement Forecast":
+            st.markdown('<div class="section-label">Cash Flow Assumptions</div>', unsafe_allow_html=True)
+
+            c1, c2 = st.columns(2)
+            with c1:
+                st.session_state["da_auto"] = st.checkbox(
+                    "Use latest D&A assumption automatically",
+                    value=st.session_state["da_auto"],
+                )
+                st.session_state["da_pct"] = st.number_input(
+                    "D&A (% of Revenue)",
+                    value=float(st.session_state["da_pct"]),
+                    step=0.5,
+                )
+            with c2:
+                st.session_state["capex_auto"] = st.checkbox(
+                    "Use latest CapEx assumption automatically",
+                    value=st.session_state["capex_auto"],
+                )
+                st.session_state["capex_pct"] = st.number_input(
+                    "CapEx (% of Revenue)",
+                    value=float(st.session_state["capex_pct"]),
+                    step=0.5,
+                )
+
+            auto_table = pd.DataFrame(
+                {
+                    "Automatic Input": ["D&A %", "CapEx %"],
+                    "Current Auto Value": [
+                        f"{auto_da_percent*100:.2f}%",
+                        f"{auto_capex_percent*100:.2f}%",
+                    ],
+                }
+            )
+            st.markdown(html_table(auto_table), unsafe_allow_html=True)
+
+        elif page == "DCF Valuation":
+            st.markdown('<div class="section-label">Valuation Assumptions</div>', unsafe_allow_html=True)
+
+            c1, c2 = st.columns(2)
+            with c1:
+                st.session_state["valuation_auto"] = st.checkbox(
+                    "Use estimated valuation assumptions automatically",
+                    value=st.session_state["valuation_auto"],
+                )
+                st.session_state["wacc_pct"] = st.number_input(
+                    "WACC (%)",
+                    value=float(st.session_state["wacc_pct"]),
+                    step=0.5,
+                )
+                st.session_state["terminal_growth_pct"] = st.number_input(
+                    "Terminal Growth Rate (%)",
+                    value=float(st.session_state["terminal_growth_pct"]),
+                    step=0.5,
+                )
+            with c2:
+                st.session_state["projection_years"] = int(
+                    st.number_input(
+                        "Projection Years",
+                        min_value=3,
+                        max_value=10,
+                        value=int(st.session_state["projection_years"]),
+                        step=1,
+                    )
+                )
+                st.session_state["manual_peers"] = st.text_input(
+                    "Custom Peer Tickers (comma-separated)",
+                    value=st.session_state["manual_peers"],
+                )
+
+            auto_table = pd.DataFrame(
+                {
+                    "Automatic Input": ["WACC", "Terminal Growth"],
+                    "Current Auto Value": [
+                        f"{auto_wacc*100:.2f}%",
+                        f"{auto_terminal_growth*100:.2f}%",
+                    ],
+                }
+            )
+            st.markdown(html_table(auto_table), unsafe_allow_html=True)
 
         # -----------------------------
         # Use assumptions
         # -----------------------------
         revenue_growth_used = historical_revenue_cagr if (st.session_state["revenue_auto"] and historical_revenue_cagr is not None) else st.session_state["revenue_growth_pct"] / 100
         ebit_margin_used = auto_ebit_margin if st.session_state["operating_auto"] else st.session_state["ebit_margin_pct"] / 100
-        da_percent_used = auto_da_percent if st.session_state["operating_auto"] else st.session_state["da_pct"] / 100
-        capex_percent_used = auto_capex_percent if st.session_state["operating_auto"] else st.session_state["capex_pct"] / 100
-        nwc_percent_used = auto_nwc_percent if st.session_state["operating_auto"] else st.session_state["nwc_pct"] / 100
+        da_percent_used = auto_da_percent if st.session_state["da_auto"] else st.session_state["da_pct"] / 100
+        capex_percent_used = auto_capex_percent if st.session_state["capex_auto"] else st.session_state["capex_pct"] / 100
+        nwc_percent_used = auto_nwc_percent if st.session_state["nwc_auto"] else st.session_state["nwc_pct"] / 100
 
-        tax_rate_used = auto_tax_rate if (st.session_state["valuation_auto"] and auto_tax_rate is not None) else st.session_state["tax_rate_pct"] / 100
+        tax_rate_used = auto_tax_rate if auto_tax_rate is not None else st.session_state["tax_rate_pct"] / 100
         wacc_used = auto_wacc if st.session_state["valuation_auto"] else st.session_state["wacc_pct"] / 100
         terminal_growth_used = auto_terminal_growth if st.session_state["valuation_auto"] else st.session_state["terminal_growth_pct"] / 100
-        net_debt_used = auto_net_debt if (st.session_state["valuation_auto"] and auto_net_debt is not None) else st.session_state["net_debt"]
+        net_debt_used = auto_net_debt if (st.session_state["net_debt_auto"] and auto_net_debt is not None) else st.session_state["net_debt"]
         projection_years = int(st.session_state["projection_years"])
 
         shares_outstanding_used = shares_outstanding_market if (st.session_state["shares_auto"] and shares_outstanding_market not in (None, 0)) else st.session_state["shares_outstanding"]
@@ -1329,6 +1393,7 @@ else:
 
         elif page == "Overview":
             st.markdown('<div class="section-label">Overview</div>', unsafe_allow_html=True)
+
             c1, c2, c3, c4 = st.columns(4)
             with c1:
                 st.markdown(f"""<div class="metric-card"><div class="metric-label">Current Price</div><div class="metric-value">{format_dollar_short(current_price)}</div></div>""", unsafe_allow_html=True)
@@ -1362,6 +1427,7 @@ else:
 
         elif page == "Market Data":
             st.markdown('<div class="section-label">Market Data</div>', unsafe_allow_html=True)
+
             m1, m2, m3, m4 = st.columns(4)
             with m1:
                 st.markdown(f"""<div class="metric-card"><div class="metric-label">Market Cap</div><div class="metric-value">{format_dollar_short(market_cap)}</div></div>""", unsafe_allow_html=True)
@@ -1382,27 +1448,17 @@ else:
             if peer_fig is not None:
                 st.plotly_chart(peer_fig, use_container_width=True)
 
-        elif page == "Forecast Model":
-            st.markdown('<div class="section-label">Forecast Model</div>', unsafe_allow_html=True)
-            st.plotly_chart(plot_forecast_chart(forecast_df), use_container_width=True)
+        elif page == "Income Statement Forecast":
+            st.markdown('<div class="section-label">Income Statement Forecast</div>', unsafe_allow_html=True)
+            st.plotly_chart(plot_income_chart(forecast_df), use_container_width=True)
 
             income_display = income_statement_df.copy()
             for col in income_display.columns:
                 if col != "Year":
                     income_display[col] = income_display[col].map(lambda x: f"${x:,.1f}")
-
-            cashflow_display = cashflow_forecast_df.copy()
-            for col in cashflow_display.columns:
-                if col != "Year":
-                    cashflow_display[col] = cashflow_display[col].map(lambda x: f"${x:,.1f}")
-
-            st.markdown('<div class="section-label">Forecast Income Statement</div>', unsafe_allow_html=True)
             st.markdown(html_table(income_display), unsafe_allow_html=True)
 
-            st.markdown('<div class="section-label">Forecast Cash Flow Statement</div>', unsafe_allow_html=True)
-            st.markdown(html_table(cashflow_display), unsafe_allow_html=True)
-
-        elif page == "Balance Sheet":
+        elif page == "Balance Sheet Forecast":
             st.markdown('<div class="section-label">Balance Sheet Forecast</div>', unsafe_allow_html=True)
             st.plotly_chart(plot_balance_chart(balance_df), use_container_width=True)
 
@@ -1412,8 +1468,19 @@ else:
                     balance_display[col] = balance_display[col].map(lambda x: f"${x:,.1f}")
             st.markdown(html_table(balance_display), unsafe_allow_html=True)
 
+        elif page == "Cash Flow Statement Forecast":
+            st.markdown('<div class="section-label">Cash Flow Statement Forecast</div>', unsafe_allow_html=True)
+            st.plotly_chart(plot_cashflow_chart(forecast_df), use_container_width=True)
+
+            cashflow_display = cashflow_forecast_df.copy()
+            for col in cashflow_display.columns:
+                if col != "Year":
+                    cashflow_display[col] = cashflow_display[col].map(lambda x: f"${x:,.1f}")
+            st.markdown(html_table(cashflow_display), unsafe_allow_html=True)
+
         elif page == "DCF Valuation":
             st.markdown('<div class="section-label">DCF Valuation</div>', unsafe_allow_html=True)
+
             d1, d2, d3 = st.columns(3)
             with d1:
                 st.markdown(f"""<div class="metric-card"><div class="metric-label">Enterprise Value</div><div class="metric-value">{format_dollar_short(enterprise_value)}</div></div>""", unsafe_allow_html=True)
@@ -1464,6 +1531,7 @@ else:
 
         elif page == "Comps Valuation":
             st.markdown('<div class="section-label">Comps Valuation</div>', unsafe_allow_html=True)
+
             c1, c2 = st.columns(2)
             with c1:
                 st.markdown(f"""<div class="metric-card"><div class="metric-label">Trailing P/E Implied Price</div><div class="metric-value">{format_dollar_short(trailing_comps_value)}</div></div>""", unsafe_allow_html=True)
