@@ -802,7 +802,7 @@ def build_balance_sheet_lite(balance_sheet: pd.DataFrame, forecast_df: pd.DataFr
         )
 
     return pd.DataFrame(rows)
-    def get_recommendation(upside_downside: float):
+def get_recommendation(upside_downside: float):
     if upside_downside >= 20:
         return "STRONG BUY", "#16A34A"
     if upside_downside >= 10:
