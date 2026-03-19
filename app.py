@@ -226,10 +226,6 @@ st.markdown(
         color: #60A5FA !important;
         font-weight: 700 !important;
         font-size: 14px !important;
-    /* ONLY checkbox sentence text - precise fix */
-    div[data-testid="stCheckbox"] label > div {
-        color: #BBD7F7 !important;
-        font-weight: 500 !important;
     }
     div[data-testid="stCheckbox"] label > DIV P {
         color: #BBD7F7 !important;
