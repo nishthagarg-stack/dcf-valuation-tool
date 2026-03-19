@@ -992,7 +992,7 @@ def plot_stock_vs_peers_chart(df: pd.DataFrame):
             font=dict(size=14, color="white"),
             orientation="h",
             x=0,
-            y=1.12,
+            y=1.02,
             bgcolor="rgba(0,0,0,0)",
             bordercolor="rgba(0,0,0,0)"
         ),
