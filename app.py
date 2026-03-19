@@ -223,7 +223,7 @@ st.markdown(
     div[data-testid="stTextInput"] label,
     div[data-testid="stSelectbox"] label,
     div[data-testid="stCheckbox"] label {
-        color: #F3F4F6 !important;
+        color: #60A5FA !important;
         font-weight: 700 !important;
         font-size: 14px !important;
     }
