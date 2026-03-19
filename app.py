@@ -226,6 +226,13 @@ st.markdown(
         color: #60A5FA !important;
         font-weight: 700 !important;
         font-size: 14px !important;
+    /* ONLY checkbox sentence text (not headings) */
+    div[data-testid="stCheckbox"] > label . div {
+        color: #93C5FD !important;
+        font-weight: 600 !important;
+    }
+    div[data-testid="stCheckbox"] > label span {
+        color: #93C5FD !important;
     }
 
     h3, h4 {
