@@ -980,7 +980,10 @@ def plot_balance_chart(balance_df: pd.DataFrame):
     fig.add_trace(go.Scatter(x=balance_df["Year"], y=balance_df["Debt ($M)"], mode="lines+markers", name="Debt ($M)", line=dict(color="#EF4444", width=4)))
     fig.add_trace(go.Scatter(x=balance_df["Year"], y=balance_df["Net Debt ($M)"], mode="lines+markers", name="Net Debt ($M)", line=dict(color="#F59E0B", width=4)))
     fig.update_layout(
-        title="Balance Sheet Trend",
+        title=dict(
+            text="Balance Sheet Trend",
+            font=dict(size=20, color="#D4AF37")
+    ),
         template="plotly_dark",
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="#111827",
@@ -988,6 +991,9 @@ def plot_balance_chart(balance_df: pd.DataFrame):
         margin=dict(l=20, r=20, t=50, b=20),
         xaxis_title="Year",
         yaxis_title="$M",
+        legend=dict(
+            font=dict(size=14, color="#FFFFFF")
+        ),
         height=380,
     )
     return fig
