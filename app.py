@@ -977,7 +977,10 @@ def plot_stock_vs_peers_chart(df: pd.DataFrame):
         )
 
     fig.update_layout(
-        title="Stock vs Peers Performance (Normalized to 100)",
+        title=dict(
+            text="Stock vs Peers Performance (Normalized to 100)",
+            font=dict(size=20, color="#D4AF37")
+        ),
         template="plotly_dark",
         paper_bgcolor="rgba(0,0,0,0)",
         plot_bgcolor="#111827",
