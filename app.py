@@ -947,6 +947,10 @@ def plot_income_chart(forecast_df: pd.DataFrame):
         margin=dict(l=20, r=20, t=50, b=20),
         xaxis_title="Year",
         yaxis_title="$M",
+
+        legend=dict(
+            font=dict(size=14, color="FFFFFF")
+        ),
         height=380,
     )
     return fig
